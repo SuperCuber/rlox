@@ -1,8 +1,10 @@
 use std::fmt::Display;
 
-#[derive(Debug)]
+use crate::token::Token;
+
+#[derive(Debug, thiserror::Error)]
 pub struct LoxError {
-    pub line: usize,
+    pub location: (usize, usize),
     pub error_kind: LoxErrorKind,
 }
 
@@ -12,10 +14,20 @@ pub enum LoxErrorKind {
     InvalidStartOfToken(char),
     #[error("unterminated string")]
     UnterminatedString,
+    #[error("unexpected token {0:?}, expected {1:?}")]
+    UnexpectedToken(Token, Token),
+    #[error("invalid expression")]
+    InvalidExpression,
+    #[error("unparsed tokens left")]
+    UnparsedTokensLeft,
 }
 
 impl Display for LoxError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}] Error: {}", self.line, self.error_kind)
+        write!(
+            f,
+            "[{}:{}] Error: {}",
+            self.location.0, self.location.1, self.error_kind
+        )
     }
 }

@@ -3,6 +3,7 @@ use crate::{
     token::{CodeToken, Keyword, Literal, Symbol, Token, Word},
 };
 
+// TODO: this is just a function with a fake mustache, refactor it
 pub struct Scanner {
     source: String,
     lexeme_start: usize,
@@ -41,7 +42,7 @@ impl Scanner {
                     if let Some(token) = token {
                         tokens.push(CodeToken {
                             token,
-                            line: self.line,
+                            location: self.location(),
                             lexeme,
                         });
                     }
@@ -54,7 +55,7 @@ impl Scanner {
 
         tokens.push(CodeToken {
             token: Token::Eof,
-            line: self.line,
+            location: self.location(),
             lexeme: "".into(),
         });
 
@@ -125,7 +126,7 @@ impl Scanner {
 
             c => {
                 return Err(LoxError {
-                    line: self.line,
+                    location: self.location(),
                     error_kind: LoxErrorKind::InvalidStartOfToken(c),
                 })
             }
@@ -163,6 +164,18 @@ impl Scanner {
             .nth(self.lexeme_start + self.lexeme_len + 1)
     }
 
+    fn location(&self) -> (usize, usize) {
+        let mut chars = 0;
+        let mut remainder = self.source.as_str();
+        for _ in 0..self.line - 1 {
+            let linebreak = remainder.find('\n').unwrap();
+            chars += linebreak;
+            remainder = &remainder[linebreak + 1..];
+        }
+        // + 1 for 1-indexed column
+        (self.line, self.lexeme_start - chars + 1)
+    }
+
     // Token helpers
 
     fn string(&mut self) -> Result<String, LoxError> {
@@ -175,7 +188,7 @@ impl Scanner {
 
         if self.is_at_end() {
             Err(LoxError {
-                line: self.line,
+                location: self.location(),
                 error_kind: LoxErrorKind::UnterminatedString,
             })
         } else {

@@ -6,6 +6,8 @@ use std::{
 use anyhow::{Context, Result};
 
 mod error;
+mod expression;
+mod parser;
 mod scanner;
 mod token;
 
@@ -51,8 +53,14 @@ fn run_file(filename: String) -> Result<()> {
 
 fn run(source: String) -> Result<()> {
     let mut scanner = scanner::Scanner::new(source);
-    let tokens = scanner.tokens();
+    let (tokens, scan_errors) = scanner.tokens();
 
-    dbg!(tokens);
+    if !scan_errors.is_empty() {
+        dbg!(scan_errors);
+    }
+    let mut parser = parser::Parser::new(tokens);
+    let ast = parser.parse()?;
+    dbg!(ast);
+
     Ok(())
 }

@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CodeToken {
     pub token: Token,
-    pub line: usize,
+    pub location: (usize, usize),
     pub lexeme: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Literal(Literal),
     Symbol(Symbol),
@@ -15,13 +15,13 @@ pub enum Token {
     Eof,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Word {
     Identifier(String),
     Keyword(Keyword),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     String(String),
     Number(f32),
@@ -29,7 +29,7 @@ pub enum Literal {
     Nil,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Symbol {
     LeftParen,
     RightParen,
@@ -52,7 +52,7 @@ pub enum Symbol {
     LessEqual,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Keyword {
     And,
     Class,
@@ -87,5 +87,19 @@ impl Keyword {
             "while" => Keyword::While,
             _ => return None,
         })
+    }
+
+    pub fn is_statement_start(&self) -> bool {
+        matches!(
+            self,
+            Keyword::Class
+                | Keyword::Fun
+                | Keyword::Var
+                | Keyword::For
+                | Keyword::If
+                | Keyword::While
+                | Keyword::Print
+                | Keyword::Return
+        )
     }
 }
