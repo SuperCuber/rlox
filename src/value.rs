@@ -63,7 +63,13 @@ impl Display for Value {
             Value::String(s) => write!(f, "\"{s}\""),
             Value::Number(n) => {
                 let n = *n;
-                if n.floor() == n {
+                if n.is_nan() {
+                    write!(f, "NaN")
+                } else if n.is_infinite() && n.is_sign_positive() {
+                    write!(f, "Inf")
+                } else if n.is_infinite() && n.is_sign_negative() {
+                    write!(f, "-Inf")
+                } else if n.floor() == n {
                     write!(f, "{}", n as i32)
                 } else {
                     write!(f, "{n}")
