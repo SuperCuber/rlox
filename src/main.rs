@@ -1,6 +1,6 @@
 use std::{
     env::args,
-    io::{stdin, BufRead},
+    io::{stdin, BufRead, Write},
 };
 
 use anyhow::{Context, Result};
@@ -12,7 +12,7 @@ mod token;
 fn main() -> Result<()> {
     anyhow::ensure!(args().len() <= 2, "Too many arguments given");
 
-    match args().nth(2) {
+    match args().nth(1) {
         Some(filename) => run_file(filename),
         None => run_prompt(),
     }?;
@@ -24,7 +24,8 @@ fn run_prompt() -> Result<()> {
     let stdin = stdin();
     let stdin = stdin.lock();
 
-    println!("> ");
+    print!("> ");
+    std::io::stdout().flush().unwrap();
     for line in stdin.lines() {
         if let Ok(line) = line {
             match run(line) {
@@ -33,6 +34,8 @@ fn run_prompt() -> Result<()> {
                     eprintln!("{}", err);
                 }
             };
+            print!("> ");
+            std::io::stdout().flush().unwrap();
         } else {
             println!("End of input. Goodbye!");
             break;
@@ -47,7 +50,6 @@ fn run_file(filename: String) -> Result<()> {
 }
 
 fn run(source: String) -> Result<()> {
-    // should scanner be a function instead?
     let mut scanner = scanner::Scanner::new(source);
     let tokens = scanner.tokens();
 
