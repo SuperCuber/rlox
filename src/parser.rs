@@ -1,10 +1,10 @@
 use crate::{
-    error::{LoxError, LoxErrorKind},
-    expression::Expression,
-    token::{CodeToken, Symbol, Token, Word},
+    error::{ParseError, ParseErrorKind},
+    expression::{BinaryOperator, Expression, UnaryOperator},
+    token::{CodeToken, Symbol, Token},
 };
 
-type LoxResult<T> = Result<T, LoxError>;
+type ParseResult<T> = Result<T, ParseError>;
 
 pub struct Parser {
     current: usize,
@@ -17,16 +17,16 @@ impl Parser {
     }
 
     // Currently parses a single expression - so only a single error can happen
-    pub fn parse(&mut self) -> LoxResult<Expression> {
+    pub fn parse(&mut self) -> ParseResult<Expression> {
         let expr = self.expression()?;
 
         // -1 for last index being length-1
         // -1 for last token being unconsumed Eof
         // +1 for current being the next token to be parsed
         if self.current != self.tokens.len() - 1 {
-            return Err(LoxError {
+            return Err(ParseError {
                 location: self.tokens.last().unwrap().location,
-                error_kind: LoxErrorKind::UnparsedTokensLeft,
+                error_kind: ParseErrorKind::UnparsedTokensLeft,
             });
         } else {
             Ok(expr)
@@ -35,11 +35,11 @@ impl Parser {
 
     // Non terminal rules
 
-    fn expression(&mut self) -> LoxResult<Expression> {
+    fn expression(&mut self) -> ParseResult<Expression> {
         self.equality()
     }
 
-    fn equality(&mut self) -> LoxResult<Expression> {
+    fn equality(&mut self) -> ParseResult<Expression> {
         let mut expr = self.comparison()?;
 
         // Short-circuiting is important here for correctness - otherwise this could match `!= ==`
@@ -49,13 +49,17 @@ impl Parser {
         {
             let operator = self.previous();
             let right = self.comparison()?;
-            expr = Expression::Binary(Box::new(expr), operator.token, Box::new(right));
+            expr = Expression::Binary(
+                Box::new(expr),
+                BinaryOperator::from_token(operator.token).unwrap(),
+                Box::new(right),
+            );
         }
 
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> LoxResult<Expression> {
+    fn comparison(&mut self) -> ParseResult<Expression> {
         let mut expr = self.term()?;
 
         while self.matches(Token::Symbol(Symbol::Greater))
@@ -65,13 +69,17 @@ impl Parser {
         {
             let operator = self.previous();
             let right = self.term()?;
-            expr = Expression::Binary(Box::new(expr), operator.token, Box::new(right));
+            expr = Expression::Binary(
+                Box::new(expr),
+                BinaryOperator::from_token(operator.token).unwrap(),
+                Box::new(right),
+            );
         }
 
         Ok(expr)
     }
 
-    fn term(&mut self) -> LoxResult<Expression> {
+    fn term(&mut self) -> ParseResult<Expression> {
         let mut expr = self.factor()?;
 
         while self.matches(Token::Symbol(Symbol::Minus))
@@ -79,13 +87,17 @@ impl Parser {
         {
             let operator = self.previous();
             let right = self.factor()?;
-            expr = Expression::Binary(Box::new(expr), operator.token, Box::new(right));
+            expr = Expression::Binary(
+                Box::new(expr),
+                BinaryOperator::from_token(operator.token).unwrap(),
+                Box::new(right),
+            );
         }
 
         Ok(expr)
     }
 
-    fn factor(&mut self) -> LoxResult<Expression> {
+    fn factor(&mut self) -> ParseResult<Expression> {
         let mut expr = self.unary()?;
 
         while self.matches(Token::Symbol(Symbol::Slash))
@@ -94,23 +106,30 @@ impl Parser {
             println!("here");
             let operator = self.previous();
             let right = self.unary()?;
-            expr = Expression::Binary(Box::new(expr), operator.token, Box::new(right));
+            expr = Expression::Binary(
+                Box::new(expr),
+                BinaryOperator::from_token(operator.token).unwrap(),
+                Box::new(right),
+            );
         }
 
         Ok(expr)
     }
 
-    fn unary(&mut self) -> LoxResult<Expression> {
+    fn unary(&mut self) -> ParseResult<Expression> {
         if self.matches(Token::Symbol(Symbol::Bang)) || self.matches(Token::Symbol(Symbol::Minus)) {
             let operator = self.previous();
             let right = self.unary()?;
-            Ok(Expression::Unary(operator.token, Box::new(right)))
+            Ok(Expression::Unary(
+                UnaryOperator::from_token(operator.token).unwrap(),
+                Box::new(right),
+            ))
         } else {
             Ok(self.primary()?)
         }
     }
 
-    fn primary(&mut self) -> LoxResult<Expression> {
+    fn primary(&mut self) -> ParseResult<Expression> {
         if let CodeToken {
             token: Token::Literal(l),
             ..
@@ -124,21 +143,21 @@ impl Parser {
             self.consume(Token::Symbol(Symbol::RightParen))?;
             Ok(Expression::Grouping(Box::new(expr)))
         } else {
-            Err(LoxError {
+            Err(ParseError {
                 location: self.tokens[self.current].location,
-                error_kind: LoxErrorKind::InvalidExpression,
+                error_kind: ParseErrorKind::InvalidExpression,
             })
         }
     }
 
-    fn consume(&mut self, expected: Token) -> LoxResult<CodeToken> {
+    fn consume(&mut self, expected: Token) -> ParseResult<CodeToken> {
         if self.check(expected.clone()) {
             Ok(self.advance())
         } else {
             let actual = self.peek();
-            Err(LoxError {
+            Err(ParseError {
                 location: actual.location,
-                error_kind: LoxErrorKind::UnexpectedToken(actual.token, expected),
+                error_kind: ParseErrorKind::UnexpectedToken(actual.token, expected),
             })
         }
     }
@@ -196,7 +215,7 @@ impl Parser {
         // Try to drop tokens until we found a statement boundary
         while !self.is_at_end() {
             if self.previous().token == Token::Symbol(Symbol::Semicolon)
-                || matches!(self.peek().token, Token::Word(Word::Keyword(k)) if k.is_statement_start())
+                || matches!(self.peek().token, Token::Keyword(k) if k.is_statement_start())
             {
                 return;
             } else {

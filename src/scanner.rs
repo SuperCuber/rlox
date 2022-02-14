@@ -1,7 +1,9 @@
 use crate::{
-    error::{LoxError, LoxErrorKind},
-    token::{CodeToken, Keyword, Literal, Symbol, Token, Word},
+    error::{TokenizeError, TokenizeErrorKind},
+    token::{CodeToken, Keyword, Literal, Symbol, Token},
 };
+
+type TokenizeResult<T> = Result<T, TokenizeError>;
 
 // TODO: this is just a function with a fake mustache, refactor it
 pub struct Scanner {
@@ -21,7 +23,7 @@ impl Scanner {
         }
     }
 
-    pub fn tokens(&mut self) -> (Vec<CodeToken>, Vec<LoxError>) {
+    pub fn tokens(&mut self) -> (Vec<CodeToken>, Vec<TokenizeError>) {
         let mut tokens = Vec::new();
         let mut errors = Vec::new();
 
@@ -62,7 +64,7 @@ impl Scanner {
         (tokens, errors)
     }
 
-    fn scan_token(&mut self) -> Result<Option<Token>, LoxError> {
+    fn scan_token(&mut self) -> TokenizeResult<Option<Token>> {
         Ok(Some(match self.advance() {
             '(' => Token::Symbol(Symbol::LeftParen),
             ')' => Token::Symbol(Symbol::RightParen),
@@ -122,12 +124,12 @@ impl Scanner {
 
             c if c.is_ascii_digit() => Token::Literal(Literal::Number(self.number())),
 
-            c if c.is_ascii_alphabetic() || c == '_' => Token::Word(self.word()),
+            c if c.is_ascii_alphabetic() || c == '_' => self.word(),
 
             c => {
-                return Err(LoxError {
+                return Err(TokenizeError {
                     location: self.location(),
-                    error_kind: LoxErrorKind::InvalidStartOfToken(c),
+                    error_kind: TokenizeErrorKind::InvalidStartOfToken(c),
                 })
             }
         }))
@@ -178,7 +180,7 @@ impl Scanner {
 
     // Token helpers
 
-    fn string(&mut self) -> Result<String, LoxError> {
+    fn string(&mut self) -> TokenizeResult<String> {
         while self.peek() != Some('"') && self.peek() != None {
             if self.peek().unwrap() == '\n' {
                 self.line += 1;
@@ -187,9 +189,9 @@ impl Scanner {
         }
 
         if self.is_at_end() {
-            Err(LoxError {
+            Err(TokenizeError {
                 location: self.location(),
-                error_kind: LoxErrorKind::UnterminatedString,
+                error_kind: TokenizeErrorKind::UnterminatedString,
             })
         } else {
             // Consume `"`
@@ -199,7 +201,8 @@ impl Scanner {
                 .source
                 .chars()
                 .skip(self.lexeme_start + 1)
-                .take(self.lexeme_len - 1)
+                // -1 for starting quote, -1 for ending quote
+                .take(self.lexeme_len - 2)
                 .collect();
             Ok(value)
         }
@@ -233,7 +236,7 @@ impl Scanner {
         number.parse().unwrap()
     }
 
-    fn word(&mut self) -> Word {
+    fn word(&mut self) -> Token {
         while self
             .peek()
             .map(|c| c.is_ascii_alphanumeric())
@@ -250,9 +253,15 @@ impl Scanner {
             .collect();
 
         if let Some(keyword) = Keyword::from_word(&text) {
-            Word::Keyword(keyword)
+            Token::Keyword(keyword)
+        } else if text == "false" {
+            Token::Literal(Literal::Boolean(false))
+        } else if text == "true" {
+            Token::Literal(Literal::Boolean(true))
+        } else if text == "nil" {
+            Token::Literal(Literal::Nil)
         } else {
-            Word::Identifier(text)
+            Token::Identifier(text)
         }
     }
 }

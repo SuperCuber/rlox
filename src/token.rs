@@ -11,21 +11,16 @@ pub struct CodeToken {
 pub enum Token {
     Literal(Literal),
     Symbol(Symbol),
-    Word(Word),
-    Eof,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Word {
     Identifier(String),
     Keyword(Keyword),
+    Eof,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     String(String),
     Number(f32),
-    Boolean,
+    Boolean(bool),
     Nil,
 }
 

@@ -7,9 +7,11 @@ use anyhow::{Context, Result};
 
 mod error;
 mod expression;
+mod interpreter;
 mod parser;
 mod scanner;
 mod token;
+mod value;
 
 fn main() -> Result<()> {
     anyhow::ensure!(args().len() <= 2, "Too many arguments given");
@@ -60,7 +62,7 @@ fn run(source: String) -> Result<()> {
     }
     let mut parser = parser::Parser::new(tokens);
     let ast = parser.parse()?;
-    dbg!(ast);
+    interpreter::interpret(ast)?;
 
     Ok(())
 }
