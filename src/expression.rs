@@ -2,10 +2,16 @@ use crate::token::{Literal, Symbol, Token};
 
 #[derive(Debug)]
 pub enum Expression {
-    Binary(Box<Expression>, BinaryOperator, Box<Expression>),
+    Binary(Box<Expression>, CodeBinaryOperator, Box<Expression>),
     Grouping(Box<Expression>),
     Literal(Literal),
-    Unary(UnaryOperator, Box<Expression>),
+    Unary(CodeUnaryOperator, Box<Expression>),
+}
+
+#[derive(Debug)]
+pub struct CodeUnaryOperator {
+    pub location: (usize, usize),
+    pub op: UnaryOperator,
 }
 
 #[derive(Debug)]
@@ -22,6 +28,12 @@ impl UnaryOperator {
             _ => None,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct CodeBinaryOperator {
+    pub location: (usize, usize),
+    pub op: BinaryOperator,
 }
 
 #[derive(Debug)]

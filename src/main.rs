@@ -59,6 +59,7 @@ fn run(source: String) -> Result<()> {
 
     if !scan_errors.is_empty() {
         dbg!(scan_errors);
+        return Ok(());
     }
     let mut parser = parser::Parser::new(tokens);
     let ast = parser.parse()?;

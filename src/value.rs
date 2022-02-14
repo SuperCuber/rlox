@@ -19,24 +19,24 @@ pub enum Type {
 }
 
 impl Value {
-    pub fn into_string(self) -> Result<String, RuntimeError> {
+    pub fn into_string(self, loc: (usize, usize)) -> Result<String, RuntimeError> {
         match self {
             Value::String(s) => Ok(s),
-            v => Err(RuntimeError::TypeError(Type::String, v.value_type())),
+            v => Err(RuntimeError::TypeError(loc, Type::String, v.value_type())),
         }
     }
 
-    pub fn into_number(self) -> Result<f32, RuntimeError> {
+    pub fn into_number(self, loc: (usize, usize)) -> Result<f32, RuntimeError> {
         match self {
             Value::Number(s) => Ok(s),
-            v => Err(RuntimeError::TypeError(Type::Number, v.value_type())),
+            v => Err(RuntimeError::TypeError(loc, Type::Number, v.value_type())),
         }
     }
 
-    pub fn into_boolean(self) -> Result<bool, RuntimeError> {
+    pub fn into_boolean(self, loc: (usize, usize)) -> Result<bool, RuntimeError> {
         match self {
             Value::Boolean(s) => Ok(s),
-            v => Err(RuntimeError::TypeError(Type::Boolean, v.value_type())),
+            v => Err(RuntimeError::TypeError(loc, Type::Boolean, v.value_type())),
         }
     }
 

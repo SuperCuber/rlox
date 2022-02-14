@@ -1,6 +1,8 @@
 use crate::{
     error::{ParseError, ParseErrorKind},
-    expression::{BinaryOperator, Expression, UnaryOperator},
+    expression::{
+        BinaryOperator, CodeBinaryOperator, CodeUnaryOperator, Expression, UnaryOperator,
+    },
     token::{CodeToken, Symbol, Token},
 };
 
@@ -51,7 +53,10 @@ impl Parser {
             let right = self.comparison()?;
             expr = Expression::Binary(
                 Box::new(expr),
-                BinaryOperator::from_token(operator.token).unwrap(),
+                CodeBinaryOperator {
+                    location: operator.location,
+                    op: BinaryOperator::from_token(operator.token).unwrap(),
+                },
                 Box::new(right),
             );
         }
@@ -71,7 +76,10 @@ impl Parser {
             let right = self.term()?;
             expr = Expression::Binary(
                 Box::new(expr),
-                BinaryOperator::from_token(operator.token).unwrap(),
+                CodeBinaryOperator {
+                    location: operator.location,
+                    op: BinaryOperator::from_token(operator.token).unwrap(),
+                },
                 Box::new(right),
             );
         }
@@ -89,7 +97,10 @@ impl Parser {
             let right = self.factor()?;
             expr = Expression::Binary(
                 Box::new(expr),
-                BinaryOperator::from_token(operator.token).unwrap(),
+                CodeBinaryOperator {
+                    location: operator.location,
+                    op: BinaryOperator::from_token(operator.token).unwrap(),
+                },
                 Box::new(right),
             );
         }
@@ -103,12 +114,14 @@ impl Parser {
         while self.matches(Token::Symbol(Symbol::Slash))
             || self.matches(Token::Symbol(Symbol::Star))
         {
-            println!("here");
             let operator = self.previous();
             let right = self.unary()?;
             expr = Expression::Binary(
                 Box::new(expr),
-                BinaryOperator::from_token(operator.token).unwrap(),
+                CodeBinaryOperator {
+                    location: operator.location,
+                    op: BinaryOperator::from_token(operator.token).unwrap(),
+                },
                 Box::new(right),
             );
         }
@@ -121,7 +134,10 @@ impl Parser {
             let operator = self.previous();
             let right = self.unary()?;
             Ok(Expression::Unary(
-                UnaryOperator::from_token(operator.token).unwrap(),
+                CodeUnaryOperator {
+                    location: operator.location,
+                    op: UnaryOperator::from_token(operator.token).unwrap(),
+                },
                 Box::new(right),
             ))
         } else {
@@ -208,7 +224,8 @@ impl Parser {
             .clone()
     }
 
-    // Error handling
+    // Error recovery
+    #[allow(dead_code)]
     fn synchronize(&mut self) {
         self.advance();
 

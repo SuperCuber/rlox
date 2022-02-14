@@ -167,15 +167,13 @@ impl Scanner {
     }
 
     fn location(&self) -> (usize, usize) {
-        let mut chars = 0;
-        let mut remainder = self.source.as_str();
-        for _ in 0..self.line - 1 {
-            let linebreak = remainder.find('\n').unwrap();
-            chars += linebreak;
-            remainder = &remainder[linebreak + 1..];
-        }
-        // + 1 for 1-indexed column
-        (self.line, self.lexeme_start - chars + 1)
+        // TODO: check how to do this properly with utf8
+        let before_current = &self.source[0..self.lexeme_start];
+        // line is different than self.line in case of multiline lexeme (like a string)
+        let line = before_current.chars().filter(|c| *c == '\n').count();
+        let last_line_start = before_current.rfind('\n').map(|x| x + 1).unwrap_or(0);
+        // + 1 for 1-indexed
+        (line + 1, self.lexeme_start - last_line_start + 1)
     }
 
     // Token helpers

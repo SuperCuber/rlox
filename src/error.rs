@@ -34,7 +34,7 @@ pub enum ParseErrorKind {
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
-    TypeError(Type, Type),
+    TypeError((usize, usize), Type, Type),
 }
 
 impl Display for TokenizeError {
@@ -60,8 +60,11 @@ impl Display for ParseError {
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RuntimeError::TypeError(expected, actual) => {
-                write!(f, "TypeError: expected {expected:?}, got {actual:?}")
+            RuntimeError::TypeError((line, col), expected, actual) => {
+                write!(
+                    f,
+                    "[{line}:{col}] Error: Type mismatch: expected {expected:?}, got {actual:?}"
+                )
             }
         }
     }

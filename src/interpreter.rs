@@ -1,6 +1,8 @@
 use crate::{
     error::RuntimeError,
-    expression::{BinaryOperator, Expression, UnaryOperator},
+    expression::{
+        BinaryOperator, CodeBinaryOperator, CodeUnaryOperator, Expression, UnaryOperator,
+    },
     token::Literal,
     value::Value,
 };
@@ -35,45 +37,48 @@ fn evaluate_grouping(e: Expression) -> RuntimeResult<Value> {
     evaluate(e)
 }
 
-fn evaluate_unary(o: UnaryOperator, r: Expression) -> RuntimeResult<Value> {
+fn evaluate_unary(o: CodeUnaryOperator, r: Expression) -> RuntimeResult<Value> {
     let right = evaluate(r)?;
 
-    Ok(match o {
-        UnaryOperator::Minus => Value::Number(-right.into_number()?),
-        UnaryOperator::Not => Value::Boolean(!right.into_boolean()?),
+    Ok(match o.op {
+        UnaryOperator::Minus => Value::Number(-right.into_number(o.location)?),
+        UnaryOperator::Not => Value::Boolean(!right.into_boolean(o.location)?),
     })
 }
 
 fn evaluate_binary(
     left: Expression,
-    operator: BinaryOperator,
+    operator: CodeBinaryOperator,
     right: Expression,
 ) -> RuntimeResult<Value> {
     let left = evaluate(left)?;
     let right = evaluate(right)?;
-    Ok(match operator {
+    let loc = operator.location;
+    Ok(match operator.op {
         // TODO: handle errors
         // Math
-        BinaryOperator::Subtract => Value::Number(left.into_number()? - right.into_number()?),
-        BinaryOperator::Divide => Value::Number(left.into_number()? / right.into_number()?),
-        BinaryOperator::Multiply => Value::Number(left.into_number()? * right.into_number()?),
+        BinaryOperator::Subtract => Value::Number(left.into_number(loc)? - right.into_number(loc)?),
+        BinaryOperator::Divide => Value::Number(left.into_number(loc)? / right.into_number(loc)?),
+        BinaryOperator::Multiply => Value::Number(left.into_number(loc)? * right.into_number(loc)?),
         // Comparison
-        BinaryOperator::Less => Value::Boolean(left.into_number()? < right.into_number()?),
-        BinaryOperator::LessEquals => Value::Boolean(left.into_number()? <= right.into_number()?),
-        BinaryOperator::Greater => Value::Boolean(left.into_number()? > right.into_number()?),
+        BinaryOperator::Less => Value::Boolean(left.into_number(loc)? < right.into_number(loc)?),
+        BinaryOperator::LessEquals => {
+            Value::Boolean(left.into_number(loc)? <= right.into_number(loc)?)
+        }
+        BinaryOperator::Greater => Value::Boolean(left.into_number(loc)? > right.into_number(loc)?),
         BinaryOperator::GreaterEquals => {
-            Value::Boolean(left.into_number()? >= right.into_number()?)
+            Value::Boolean(left.into_number(loc)? >= right.into_number(loc)?)
         }
         // Equality
         BinaryOperator::Equals => Value::Boolean(left == right),
         BinaryOperator::NotEquals => Value::Boolean(left != right),
         // Add
         BinaryOperator::Add => {
-            if let Ok(left) = left.clone().into_number() {
-                let right = right.into_number()?;
+            if let Ok(left) = left.clone().into_number(loc) {
+                let right = right.into_number(loc)?;
                 Value::Number(left + right)
-            } else if let Ok(left) = left.into_string() {
-                let right = right.into_string()?;
+            } else if let Ok(left) = left.into_string(loc) {
+                let right = right.into_string(loc)?;
                 Value::String(left + &right)
             } else {
                 panic!("type error");
