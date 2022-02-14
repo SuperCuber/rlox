@@ -167,8 +167,8 @@ impl Scanner {
     }
 
     fn location(&self) -> (usize, usize) {
-        // TODO: check how to do this properly with utf8
-        let before_current = &self.source[0..self.lexeme_start];
+        let lexeme_start_byte = self.source.char_indices().nth(self.lexeme_start).unwrap().0;
+        let before_current = &self.source[0..lexeme_start_byte];
         // line is different than self.line in case of multiline lexeme (like a string)
         let line = before_current.chars().filter(|c| *c == '\n').count();
         let last_line_start = before_current.rfind('\n').map(|x| x + 1).unwrap_or(0);

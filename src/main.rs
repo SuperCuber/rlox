@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use interpreter::Interpreter;
 
 mod error;
 mod expression;
@@ -25,14 +26,15 @@ fn main() -> Result<()> {
 }
 
 fn run_prompt() -> Result<()> {
+    let mut interpreter = interpreter::Interpreter::new();
+
     let stdin = stdin();
     let stdin = stdin.lock();
-
     print!("> ");
     std::io::stdout().flush().unwrap();
     for line in stdin.lines() {
         if let Ok(line) = line {
-            match run(line) {
+            match run(line, &mut interpreter) {
                 Ok(()) => {}
                 Err(err) => {
                     eprintln!("{}", err);
@@ -49,11 +51,15 @@ fn run_prompt() -> Result<()> {
 }
 
 fn run_file(filename: String) -> Result<()> {
-    run(std::fs::read_to_string(filename).context("read file")?)?;
+    let mut interpreter = interpreter::Interpreter::new();
+    run(
+        std::fs::read_to_string(filename).context("read file")?,
+        &mut interpreter,
+    )?;
     Ok(())
 }
 
-fn run(source: String) -> Result<()> {
+fn run(source: String, interpreter: &mut Interpreter) -> Result<()> {
     let mut scanner = scanner::Scanner::new(source);
     let (tokens, scan_errors) = scanner.tokens();
 
@@ -63,7 +69,7 @@ fn run(source: String) -> Result<()> {
     }
     let mut parser = parser::Parser::new(tokens);
     let ast = parser.parse()?;
-    interpreter::interpret(ast)?;
+    interpreter.interpret(ast)?;
 
     Ok(())
 }
