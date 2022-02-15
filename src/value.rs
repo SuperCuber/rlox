@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::error::RuntimeError;
+use crate::error::RuntimeErrorKind;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -19,24 +19,24 @@ pub enum Type {
 }
 
 impl Value {
-    pub fn into_string(self, loc: (usize, usize)) -> Result<String, RuntimeError> {
+    pub fn into_string(self) -> Result<String, RuntimeErrorKind> {
         match self {
             Value::String(s) => Ok(s),
-            v => Err(RuntimeError::TypeError(loc, Type::String, v.value_type())),
+            v => Err(RuntimeErrorKind::TypeError(Type::String, v.value_type())),
         }
     }
 
-    pub fn into_number(self, loc: (usize, usize)) -> Result<f32, RuntimeError> {
+    pub fn into_number(self) -> Result<f32, RuntimeErrorKind> {
         match self {
             Value::Number(s) => Ok(s),
-            v => Err(RuntimeError::TypeError(loc, Type::Number, v.value_type())),
+            v => Err(RuntimeErrorKind::TypeError(Type::Number, v.value_type())),
         }
     }
 
-    pub fn into_boolean(self, loc: (usize, usize)) -> Result<bool, RuntimeError> {
+    pub fn into_boolean(self) -> Result<bool, RuntimeErrorKind> {
         match self {
             Value::Boolean(s) => Ok(s),
-            v => Err(RuntimeError::TypeError(loc, Type::Boolean, v.value_type())),
+            v => Err(RuntimeErrorKind::TypeError(Type::Boolean, v.value_type())),
         }
     }
 
@@ -60,7 +60,7 @@ impl Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::String(s) => write!(f, "\"{s}\""),
+            Value::String(s) => write!(f, "{s}"),
             Value::Number(n) => {
                 let n = *n;
                 if n.is_nan() {

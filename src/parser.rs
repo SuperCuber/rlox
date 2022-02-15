@@ -1,9 +1,7 @@
 use crate::{
-    error::{ParseError, ParseErrorKind},
-    expression::{
-        BinaryOperator, CodeBinaryOperator, CodeUnaryOperator, Expression, UnaryOperator,
-    },
-    token::{CodeToken, Symbol, Token},
+    ast::{BinaryOperator, Expression, Statement, UnaryOperator},
+    error::{Located, ParseError, ParseErrorKind},
+    token::{CodeToken, Keyword, Symbol, Token},
 };
 
 type ParseResult<T> = Result<T, ParseError>;
@@ -11,31 +9,86 @@ type ParseResult<T> = Result<T, ParseError>;
 pub struct Parser {
     current: usize,
     tokens: Vec<CodeToken>,
+    errors: Vec<ParseError>,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<CodeToken>) -> Parser {
-        Parser { current: 0, tokens }
+        Parser {
+            current: 0,
+            tokens,
+            errors: Vec::new(),
+        }
     }
 
     // Currently parses a single expression - so only a single error can happen
-    pub fn parse(&mut self) -> ParseResult<Expression> {
-        let expr = self.expression()?;
-
-        // -1 for last index being length-1
-        // -1 for last token being unconsumed Eof
-        // +1 for current being the next token to be parsed
-        if self.current != self.tokens.len() - 1 {
-            return Err(ParseError {
-                location: self.tokens.last().unwrap().location,
-                error_kind: ParseErrorKind::UnparsedTokensLeft,
-            });
+    pub fn parse(mut self) -> Result<Vec<Statement>, Vec<ParseError>> {
+        let mut statements = Vec::new();
+        while !self.is_at_end() {
+            if let Some(d) = self.declaration() {
+                statements.push(d);
+            }
+        }
+        if self.errors.is_empty() {
+            Ok(statements)
         } else {
-            Ok(expr)
+            Err(self.errors)
         }
     }
 
     // Non terminal rules
+
+    /// Returns none if there was a parsing error and a synchronization has been run
+    fn declaration(&mut self) -> Option<Statement> {
+        let statement = if self.matches(Token::Keyword(Keyword::Var)) {
+            self.var_declaration()
+        } else {
+            self.statement()
+        };
+
+        match statement {
+            Ok(d) => Some(d),
+            Err(e) => {
+                self.errors.push(e);
+                self.synchronize();
+                None
+            }
+        }
+    }
+
+    fn var_declaration(&mut self) -> ParseResult<Statement> {
+        let name = self.consume_identifier()?;
+
+        let initializer = if self.matches(Token::Symbol(Symbol::Equal)) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(Token::Symbol(Symbol::Semicolon))?;
+        Ok(Statement::Var(name.value, initializer))
+    }
+
+    fn statement(&mut self) -> ParseResult<Statement> {
+        if self.matches(Token::Keyword(Keyword::Print)) {
+            self.print_statement()
+        } else {
+            self.expression_statement()
+        }
+    }
+
+    fn print_statement(&mut self) -> ParseResult<Statement> {
+        // Keyword::Print token is already consumed
+        let value = self.expression()?;
+        self.consume(Token::Symbol(Symbol::Semicolon))?;
+        Ok(Statement::Print(value))
+    }
+
+    fn expression_statement(&mut self) -> ParseResult<Statement> {
+        let expr = self.expression()?;
+        self.consume(Token::Symbol(Symbol::Semicolon))?;
+        Ok(Statement::Expression(expr))
+    }
 
     fn expression(&mut self) -> ParseResult<Expression> {
         self.equality()
@@ -53,9 +106,9 @@ impl Parser {
             let right = self.comparison()?;
             expr = Expression::Binary(
                 Box::new(expr),
-                CodeBinaryOperator {
+                Located {
                     location: operator.location,
-                    op: BinaryOperator::from_token(operator.token).unwrap(),
+                    value: BinaryOperator::from_token(operator.token).unwrap(),
                 },
                 Box::new(right),
             );
@@ -76,9 +129,9 @@ impl Parser {
             let right = self.term()?;
             expr = Expression::Binary(
                 Box::new(expr),
-                CodeBinaryOperator {
+                Located {
                     location: operator.location,
-                    op: BinaryOperator::from_token(operator.token).unwrap(),
+                    value: BinaryOperator::from_token(operator.token).unwrap(),
                 },
                 Box::new(right),
             );
@@ -97,9 +150,9 @@ impl Parser {
             let right = self.factor()?;
             expr = Expression::Binary(
                 Box::new(expr),
-                CodeBinaryOperator {
+                Located {
                     location: operator.location,
-                    op: BinaryOperator::from_token(operator.token).unwrap(),
+                    value: BinaryOperator::from_token(operator.token).unwrap(),
                 },
                 Box::new(right),
             );
@@ -118,9 +171,9 @@ impl Parser {
             let right = self.unary()?;
             expr = Expression::Binary(
                 Box::new(expr),
-                CodeBinaryOperator {
+                Located {
                     location: operator.location,
-                    op: BinaryOperator::from_token(operator.token).unwrap(),
+                    value: BinaryOperator::from_token(operator.token).unwrap(),
                 },
                 Box::new(right),
             );
@@ -134,9 +187,9 @@ impl Parser {
             let operator = self.previous();
             let right = self.unary()?;
             Ok(Expression::Unary(
-                CodeUnaryOperator {
+                Located {
                     location: operator.location,
-                    op: UnaryOperator::from_token(operator.token).unwrap(),
+                    value: UnaryOperator::from_token(operator.token).unwrap(),
                 },
                 Box::new(right),
             ))
@@ -154,15 +207,35 @@ impl Parser {
             // manual advance() as part of the manual matches()
             self.current += 1;
             Ok(Expression::Literal(l.clone()))
+        } else if let Ok(identifier) = self.consume_identifier() {
+            Ok(Expression::Variable(identifier))
         } else if self.matches(Token::Symbol(Symbol::LeftParen)) {
             let expr = self.expression()?;
             self.consume(Token::Symbol(Symbol::RightParen))?;
             Ok(Expression::Grouping(Box::new(expr)))
         } else {
-            Err(ParseError {
+            Err(Located {
                 location: self.tokens[self.current].location,
-                error_kind: ParseErrorKind::InvalidExpression,
+                value: ParseErrorKind::InvalidExpression,
             })
+        }
+    }
+
+    fn consume_identifier(&mut self) -> ParseResult<Located<String>> {
+        let actual = self.peek();
+        match actual.token {
+            Token::Identifier(i) => Ok(Located {
+                location: actual.location,
+                value: i,
+            }),
+            _ => Err(Located {
+                location: actual.location,
+                value: ParseErrorKind::UnexpectedToken(
+                    actual.token,
+                    // TODO oh no
+                    Token::Identifier("".into()),
+                ),
+            }),
         }
     }
 
@@ -171,9 +244,9 @@ impl Parser {
             Ok(self.advance())
         } else {
             let actual = self.peek();
-            Err(ParseError {
+            Err(Located {
                 location: actual.location,
-                error_kind: ParseErrorKind::UnexpectedToken(actual.token, expected),
+                value: ParseErrorKind::UnexpectedToken(actual.token, expected),
             })
         }
     }
@@ -191,9 +264,6 @@ impl Parser {
     }
 
     fn check(&self, token: Token) -> bool {
-        if self.is_at_end() {
-            return false;
-        };
         self.peek().token == token
     }
 
@@ -225,7 +295,6 @@ impl Parser {
     }
 
     // Error recovery
-    #[allow(dead_code)]
     fn synchronize(&mut self) {
         self.advance();
 

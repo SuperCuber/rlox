@@ -1,12 +1,14 @@
-use std::fmt::Display;
+use std::{error::Error, fmt::Display};
 
 use crate::{token::Token, value::Type};
 
-#[derive(Debug, thiserror::Error)]
-pub struct TokenizeError {
+#[derive(Debug)]
+pub struct Located<T> {
     pub location: (usize, usize),
-    pub error_kind: TokenizeErrorKind,
+    pub value: T,
 }
+
+pub type TokenizeError = Located<TokenizeErrorKind>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TokenizeErrorKind {
@@ -16,11 +18,7 @@ pub enum TokenizeErrorKind {
     UnterminatedString,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub struct ParseError {
-    pub location: (usize, usize),
-    pub error_kind: ParseErrorKind,
-}
+pub type ParseError = Located<ParseErrorKind>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParseErrorKind {
@@ -28,51 +26,40 @@ pub enum ParseErrorKind {
     UnexpectedToken(Token, Token),
     #[error("invalid expression")]
     InvalidExpression,
-    #[error("unparsed tokens left")]
-    UnparsedTokensLeft,
 }
+
+pub type RuntimeError = Located<RuntimeErrorKind>;
 
 #[derive(Debug, thiserror::Error)]
-pub enum RuntimeError {
-    TypeError((usize, usize), Type, Type),
-    TypeErrorMultiple((usize, usize), Vec<Type>, Type),
+pub enum RuntimeErrorKind {
+    #[error("invalid expression")]
+    TypeError(Type, Type),
+    #[error("invalid expression")]
+    TypeErrorMultiple(Vec<Type>, Type),
+    #[error("invalid expression")]
+    UndefinedVariable(String),
 }
 
-impl Display for TokenizeError {
+impl<E: Error> Display for Located<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "[{}:{}] Error: {}",
-            self.location.0, self.location.1, self.error_kind
+            self.location.0, self.location.1, self.value
         )
     }
 }
 
-impl Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "[{}:{}] Error: {}",
-            self.location.0, self.location.1, self.error_kind
-        )
-    }
+impl<E: Error> Error for Located<E> {}
+
+pub trait WithLocation {
+    type Output;
+    fn with_location(self, location: (usize, usize)) -> Self::Output;
 }
 
-impl Display for RuntimeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RuntimeError::TypeError((line, col), expected, actual) => {
-                write!(
-                    f,
-                    "[{line}:{col}] Error: Type mismatch: expected {expected:?}, got {actual:?}"
-                )
-            }
-            RuntimeError::TypeErrorMultiple((line, col), expected, actual) => {
-                write!(
-                    f,
-                    "[{line}:{col}] Error: Type mismatch: expected {expected:?}, got {actual:?}"
-                )
-            }
-        }
+impl<T, E> WithLocation for Result<T, E> {
+    type Output = Result<T, Located<E>>;
+    fn with_location(self, location: (usize, usize)) -> Result<T, Located<E>> {
+        self.map_err(|e| Located { location, value: e })
     }
 }

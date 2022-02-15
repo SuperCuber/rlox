@@ -1,11 +1,17 @@
-use crate::token::{Literal, Symbol, Token};
+use crate::{
+    error::Located,
+    token::{Literal, Symbol, Token},
+};
+
+// Expressions
 
 #[derive(Debug)]
 pub enum Expression {
-    Binary(Box<Expression>, CodeBinaryOperator, Box<Expression>),
+    Binary(Box<Expression>, Located<BinaryOperator>, Box<Expression>),
     Grouping(Box<Expression>),
     Literal(Literal),
-    Unary(CodeUnaryOperator, Box<Expression>),
+    Unary(Located<UnaryOperator>, Box<Expression>),
+    Variable(Located<String>),
 }
 
 #[derive(Debug)]
@@ -66,4 +72,12 @@ impl BinaryOperator {
             _ => None,
         }
     }
+}
+
+// Statements
+#[derive(Debug)]
+pub enum Statement {
+    Expression(Expression),
+    Print(Expression),
+    Var(String, Option<Expression>),
 }

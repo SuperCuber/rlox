@@ -6,8 +6,9 @@ use std::{
 use anyhow::{Context, Result};
 use interpreter::Interpreter;
 
+mod ast;
+mod environment;
 mod error;
-mod expression;
 mod interpreter;
 mod parser;
 mod scanner;
@@ -64,12 +65,20 @@ fn run(source: String, interpreter: &mut Interpreter) -> Result<()> {
     let (tokens, scan_errors) = scanner.tokens();
 
     if !scan_errors.is_empty() {
-        dbg!(scan_errors);
+        for err in scan_errors {
+            eprintln!("{}", err);
+        }
         return Ok(());
     }
-    let mut parser = parser::Parser::new(tokens);
-    let ast = parser.parse()?;
-    interpreter.interpret(ast)?;
+    let parser = parser::Parser::new(tokens);
+    match parser.parse() {
+        Ok(ast) => interpreter.interpret(ast)?,
+        Err(errs) => {
+            for err in errs {
+                eprintln!("{}", err);
+            }
+        }
+    };
 
     Ok(())
 }
