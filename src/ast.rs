@@ -5,7 +5,7 @@ use crate::{
 
 // Expressions
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     Binary(Box<Expression>, Located<BinaryOperator>, Box<Expression>),
     Grouping(Box<Expression>),
@@ -16,7 +16,7 @@ pub enum Expression {
     Assign(Located<String>, Box<Expression>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnaryOperator {
     Minus,
     Not,
@@ -32,7 +32,7 @@ impl UnaryOperator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -44,6 +44,8 @@ pub enum BinaryOperator {
     LessEquals,
     Greater,
     GreaterEquals,
+    And,
+    Or,
 }
 
 impl BinaryOperator {
@@ -65,10 +67,12 @@ impl BinaryOperator {
 }
 
 // Statements
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     Expression(Expression),
     Print(Expression),
     Var(String, Option<Expression>),
+    While(Expression, Box<Statement>),
     Block(Vec<Statement>),
+    If(Expression, Box<Statement>, Option<Box<Statement>>),
 }

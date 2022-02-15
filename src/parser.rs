@@ -1,7 +1,7 @@
 use crate::{
     ast::{BinaryOperator, Expression, Statement, UnaryOperator},
     error::{Located, ParseError, ParseErrorKind},
-    token::{CodeToken, Keyword, Symbol, Token},
+    token::{CodeToken, Keyword, Literal, Symbol, Token},
 };
 
 type ParseResult<T> = Result<T, ParseError>;
@@ -83,13 +83,87 @@ impl Parser {
     }
 
     fn statement(&mut self) -> ParseResult<Statement> {
-        if self.matches(Token::Keyword(Keyword::Print)) {
+        if self.matches(Token::Keyword(Keyword::If)) {
+            self.if_statement()
+        } else if self.matches(Token::Keyword(Keyword::For)) {
+            self.for_statement()
+        } else if self.matches(Token::Keyword(Keyword::While)) {
+            self.while_statement()
+        } else if self.matches(Token::Keyword(Keyword::Print)) {
             self.print_statement()
         } else if self.matches(Token::Symbol(Symbol::LeftBrace)) {
             self.block().map(Statement::Block)
         } else {
             self.expression_statement()
         }
+    }
+
+    fn if_statement(&mut self) -> ParseResult<Statement> {
+        self.consume(Token::Symbol(Symbol::LeftParen))?;
+        let condition = self.expression()?;
+        self.consume(Token::Symbol(Symbol::RightParen))?;
+
+        let then_branch = self.statement()?;
+        let else_branch = if self.matches(Token::Keyword(Keyword::Else)) {
+            Some(self.statement()?)
+        } else {
+            None
+        };
+
+        Ok(Statement::If(
+            condition,
+            Box::new(then_branch),
+            else_branch.map(Box::new),
+        ))
+    }
+
+    /// Desugared into a while loop
+    fn for_statement(&mut self) -> ParseResult<Statement> {
+        self.consume(Token::Symbol(Symbol::LeftParen))?;
+        let initializer = if self.matches(Token::Symbol(Symbol::Semicolon)) {
+            None
+        } else if self.matches(Token::Keyword(Keyword::Var)) {
+            Some(self.var_declaration()?)
+        } else {
+            Some(self.expression_statement()?)
+        };
+
+        let condition = if !self.check(Token::Symbol(Symbol::Semicolon)) {
+            self.expression()?
+        } else {
+            Expression::Literal(Literal::Boolean(true))
+        };
+        self.consume(Token::Symbol(Symbol::Semicolon))?;
+
+        let increment = if !self.check(Token::Symbol(Symbol::RightParen)) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        self.consume(Token::Symbol(Symbol::RightParen))?;
+
+        let mut body = self.statement()?;
+
+        if let Some(increment) = increment {
+            body = Statement::Block(vec![body, Statement::Expression(increment)]);
+        }
+
+        body = Statement::While(condition, Box::new(body));
+
+        if let Some(initializer) = initializer {
+            body = Statement::Block(vec![initializer, body]);
+        }
+
+        Ok(body)
+    }
+
+    fn while_statement(&mut self) -> ParseResult<Statement> {
+        self.consume(Token::Symbol(Symbol::LeftParen))?;
+        let condition = self.expression()?;
+        self.consume(Token::Symbol(Symbol::RightParen))?;
+        let body = self.statement()?;
+
+        Ok(Statement::While(condition, Box::new(body)))
     }
 
     fn print_statement(&mut self) -> ParseResult<Statement> {
@@ -124,7 +198,7 @@ impl Parser {
 
     fn assignment(&mut self) -> ParseResult<Expression> {
         // Dirty trick: parse lvalue as rvalue
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if self.matches(Token::Symbol(Symbol::Equal)) {
             let equals = self.previous();
@@ -146,6 +220,44 @@ impl Parser {
         } else {
             Ok(expr)
         }
+    }
+
+    fn or(&mut self) -> ParseResult<Expression> {
+        let mut expr = self.and()?;
+
+        while self.matches(Token::Keyword(Keyword::Or)) {
+            let operator = self.previous();
+            let right = self.and()?;
+            expr = Expression::Binary(
+                Box::new(expr),
+                Located {
+                    location: operator.location,
+                    value: BinaryOperator::Or,
+                },
+                Box::new(right),
+            );
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> ParseResult<Expression> {
+        let mut expr = self.equality()?;
+
+        while self.matches(Token::Keyword(Keyword::And)) {
+            let operator = self.previous();
+            let right = self.equality()?;
+            expr = Expression::Binary(
+                Box::new(expr),
+                Located {
+                    location: operator.location,
+                    value: BinaryOperator::And,
+                },
+                Box::new(right),
+            );
+        }
+
+        Ok(expr)
     }
 
     fn equality(&mut self) -> ParseResult<Expression> {

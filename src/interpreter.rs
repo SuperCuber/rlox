@@ -35,6 +35,10 @@ impl Interpreter {
             }
             Statement::Var(name, value) => self.execute_statement_var(name, value),
             Statement::Block(b) => self.execute_block(b),
+            Statement::If(condition, then_branch, else_branch) => {
+                self.execute_if(condition, *then_branch, else_branch)
+            }
+            Statement::While(condition, body) => self.execute_while(condition, *body),
         }
     }
 
@@ -62,6 +66,34 @@ impl Interpreter {
             }
         }
         self.environment.pop_env();
+        Ok(())
+    }
+
+    fn execute_if(
+        &mut self,
+        condition: Expression,
+        then_branch: Statement,
+        else_branch: Option<Box<Statement>>,
+    ) -> RuntimeResult<()> {
+        let condition = self.evaluate(condition)?;
+        // TODO oh no
+        if condition.into_boolean().with_location((0, 0))? {
+            self.execute(then_branch)?;
+        } else if let Some(else_branch) = else_branch {
+            self.execute(*else_branch)?;
+        }
+        Ok(())
+    }
+
+    fn execute_while(&mut self, condition: Expression, body: Statement) -> RuntimeResult<()> {
+        // TODO oh no
+        while self
+            .evaluate(condition.clone())?
+            .into_boolean()
+            .with_location((0, 0))?
+        {
+            self.execute(body.clone())?;
+        }
         Ok(())
     }
 
@@ -146,6 +178,25 @@ impl Interpreter {
             // Equality
             BinaryOperator::Equals => Value::Boolean(left == right),
             BinaryOperator::NotEquals => Value::Boolean(left != right),
+            // Logical - short circuiting
+            BinaryOperator::And => {
+                let left = left.into_boolean().with_location(loc)?;
+                let right = right.into_boolean().with_location(loc)?;
+                if !left {
+                    Value::Boolean(false)
+                } else {
+                    Value::Boolean(right)
+                }
+            }
+            BinaryOperator::Or => {
+                let left = left.into_boolean().with_location(loc)?;
+                let right = right.into_boolean().with_location(loc)?;
+                if left {
+                    Value::Boolean(true)
+                } else {
+                    Value::Boolean(right)
+                }
+            }
             // Add
             BinaryOperator::Add => {
                 if let Ok(left) = left.clone().into_number().with_location(loc) {

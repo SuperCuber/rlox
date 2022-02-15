@@ -14,7 +14,7 @@ pub enum LoxError {
     Runtime(#[from] RuntimeError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Located<T> {
     pub location: (usize, usize),
     pub value: T,
