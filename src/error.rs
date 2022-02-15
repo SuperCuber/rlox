@@ -1,6 +1,18 @@
-use std::{error::Error, fmt::Display};
+use std::{error::Error, fmt::Display, io};
 
 use crate::{token::Token, value::Type};
+
+#[derive(Debug, thiserror::Error)]
+pub enum LoxError {
+    #[error("{0}")]
+    Io(#[from] io::Error),
+    #[error("{0}")]
+    Tokenize(#[from] TokenizeError),
+    #[error("{0}")]
+    Parse(#[from] ParseError),
+    #[error("{0}")]
+    Runtime(#[from] RuntimeError),
+}
 
 #[derive(Debug)]
 pub struct Located<T> {

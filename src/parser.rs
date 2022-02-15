@@ -21,7 +21,6 @@ impl Parser {
         }
     }
 
-    // Currently parses a single expression - so only a single error can happen
     pub fn parse(mut self) -> Result<Vec<Statement>, Vec<ParseError>> {
         let mut statements = Vec::new();
         while !self.is_at_end() {
@@ -31,6 +30,20 @@ impl Parser {
         }
         if self.errors.is_empty() {
             Ok(statements)
+        } else {
+            Err(self.errors)
+        }
+    }
+
+    pub fn parse_expression(mut self) -> Result<Expression, Vec<ParseError>> {
+        let expression = self.expression().map_err(|e| vec![e])?;
+        if self.errors.is_empty() {
+            if self.is_at_end() {
+                Ok(expression)
+            } else {
+                // Errors are thrown away anyways
+                Err(vec![])
+            }
         } else {
             Err(self.errors)
         }
@@ -72,6 +85,8 @@ impl Parser {
     fn statement(&mut self) -> ParseResult<Statement> {
         if self.matches(Token::Keyword(Keyword::Print)) {
             self.print_statement()
+        } else if self.matches(Token::Symbol(Symbol::LeftBrace)) {
+            self.block().map(Statement::Block)
         } else {
             self.expression_statement()
         }
@@ -82,6 +97,19 @@ impl Parser {
         let value = self.expression()?;
         self.consume(Token::Symbol(Symbol::Semicolon))?;
         Ok(Statement::Print(value))
+    }
+
+    // Doesn't return a Statement::Block directly for reusability in function parsing
+    fn block(&mut self) -> ParseResult<Vec<Statement>> {
+        // Left brace already consumed
+        let mut statements = Vec::new();
+        while !self.check(Token::Symbol(Symbol::RightBrace)) && !self.is_at_end() {
+            if let Some(d) = self.declaration() {
+                statements.push(d);
+            }
+        }
+        self.consume(Token::Symbol(Symbol::RightBrace))?;
+        Ok(statements)
     }
 
     fn expression_statement(&mut self) -> ParseResult<Statement> {

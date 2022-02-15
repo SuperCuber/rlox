@@ -70,4 +70,5 @@ pub enum Statement {
     Expression(Expression),
     Print(Expression),
     Var(String, Option<Expression>),
+    Block(Vec<Statement>),
 }

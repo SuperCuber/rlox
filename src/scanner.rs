@@ -23,7 +23,15 @@ impl Scanner {
         }
     }
 
-    pub fn tokens(&mut self) -> (Vec<CodeToken>, Vec<TokenizeError>) {
+    pub fn tokens(&mut self) -> Result<Vec<CodeToken>, Vec<TokenizeError>> {
+        if self.source.is_empty() {
+            return Ok(vec![CodeToken {
+                location: (0, 0),
+                lexeme: "".into(),
+                token: Token::Eof,
+            }]);
+        }
+
         let mut tokens = Vec::new();
         let mut errors = Vec::new();
 
@@ -61,7 +69,11 @@ impl Scanner {
             lexeme: "".into(),
         });
 
-        (tokens, errors)
+        if errors.is_empty() {
+            Ok(tokens)
+        } else {
+            Err(errors)
+        }
     }
 
     fn scan_token(&mut self) -> TokenizeResult<Option<Token>> {

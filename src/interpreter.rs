@@ -34,6 +34,7 @@ impl Interpreter {
                 Ok(())
             }
             Statement::Var(name, value) => self.execute_statement_var(name, value),
+            Statement::Block(b) => self.execute_block(b),
         }
     }
 
@@ -52,7 +53,19 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate(&mut self, expression: Expression) -> RuntimeResult<Value> {
+    fn execute_block(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
+        self.environment.push_env();
+        for statement in statements {
+            if let Err(e) = self.execute(statement) {
+                self.environment.pop_env();
+                return Err(e);
+            }
+        }
+        self.environment.pop_env();
+        Ok(())
+    }
+
+    pub fn evaluate(&mut self, expression: Expression) -> RuntimeResult<Value> {
         match expression {
             Expression::Literal(l) => Ok(self.evaluate_literal(l)),
             Expression::Grouping(e) => self.evaluate_grouping(*e),

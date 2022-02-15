@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use error::LoxError;
 use interpreter::Interpreter;
 
 mod ast;
@@ -35,9 +36,8 @@ fn run_prompt() -> Result<()> {
     std::io::stdout().flush().unwrap();
     for line in stdin.lines() {
         if let Ok(line) = line {
-            match run(line, &mut interpreter) {
-                Ok(()) => {}
-                Err(err) => {
+            if let Err(errs) = run(line, &mut interpreter, true) {
+                for err in errs {
                     eprintln!("{}", err);
                 }
             };
@@ -53,32 +53,44 @@ fn run_prompt() -> Result<()> {
 
 fn run_file(filename: String) -> Result<()> {
     let mut interpreter = interpreter::Interpreter::new();
-    run(
-        std::fs::read_to_string(filename).context("read file")?,
-        &mut interpreter,
-    )?;
+    let source = std::fs::read_to_string(filename).context("read source file")?;
+    if let Err(errs) = run(source, &mut interpreter, false) {
+        for err in errs {
+            eprintln!("{}", err);
+        }
+    }
     Ok(())
 }
 
-fn run(source: String, interpreter: &mut Interpreter) -> Result<()> {
+fn run(
+    source: String,
+    interpreter: &mut Interpreter,
+    allow_single_expression: bool,
+) -> Result<(), Vec<LoxError>> {
     let mut scanner = scanner::Scanner::new(source);
-    let (tokens, scan_errors) = scanner.tokens();
+    let tokens = scanner
+        .tokens()
+        .map_err(|e| e.into_iter().map(Into::into).collect::<Vec<LoxError>>())?;
 
-    if !scan_errors.is_empty() {
-        for err in scan_errors {
-            eprintln!("{}", err);
+    if allow_single_expression {
+        // Try to parse as a single expression
+        let parser = parser::Parser::new(tokens.clone());
+        let expr = parser
+            .parse_expression()
+            .map_err(|e| e.into_iter().map(Into::into).collect::<Vec<LoxError>>());
+        if let Ok(expr) = expr {
+            let value = interpreter.evaluate(expr).map_err(|e| vec![e.into()])?;
+            println!("{}", value);
+            return Ok(());
         }
-        return Ok(());
+        // Try to parse as a program now
     }
-    let parser = parser::Parser::new(tokens);
-    match parser.parse() {
-        Ok(ast) => interpreter.interpret(ast)?,
-        Err(errs) => {
-            for err in errs {
-                eprintln!("{}", err);
-            }
-        }
-    };
 
+    let parser = parser::Parser::new(tokens);
+    let ast = parser
+        .parse()
+        .map_err(|e| e.into_iter().map(Into::into).collect::<Vec<LoxError>>())?;
+
+    interpreter.interpret(ast).map_err(|e| vec![e.into()])?;
     Ok(())
 }
