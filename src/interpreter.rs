@@ -4,7 +4,7 @@ use crate::{
         BinaryOperator, CodeBinaryOperator, CodeUnaryOperator, Expression, UnaryOperator,
     },
     token::Literal,
-    value::Value,
+    value::{Type, Value},
 };
 
 type RuntimeResult<T> = Result<T, RuntimeError>;
@@ -94,11 +94,15 @@ impl Interpreter {
                 if let Ok(left) = left.clone().into_number(loc) {
                     let right = right.into_number(loc)?;
                     Value::Number(left + right)
-                } else if let Ok(left) = left.into_string(loc) {
+                } else if let Ok(left) = left.clone().into_string(loc) {
                     let right = right.into_string(loc)?;
                     Value::String(left + &right)
                 } else {
-                    panic!("type error");
+                    return Err(RuntimeError::TypeErrorMultiple(
+                        loc,
+                        vec![Type::Number, Type::String],
+                        left.value_type(),
+                    ));
                 }
             }
         })
