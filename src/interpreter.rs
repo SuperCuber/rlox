@@ -52,14 +52,27 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate(&self, expression: Expression) -> RuntimeResult<Value> {
+    fn evaluate(&mut self, expression: Expression) -> RuntimeResult<Value> {
         match expression {
             Expression::Literal(l) => Ok(self.evaluate_literal(l)),
             Expression::Grouping(e) => self.evaluate_grouping(*e),
             Expression::Unary(o, r) => self.evaluate_unary(o, *r),
             Expression::Binary(l, o, r) => self.evaluate_binary(*l, o, *r),
             Expression::Variable(v) => self.environment.get(v.value).with_location(v.location),
+            Expression::Assign(v, e) => self.evaluate_assign(v, *e),
         }
+    }
+
+    fn evaluate_assign(
+        &mut self,
+        variable: Located<String>,
+        expression: Expression,
+    ) -> RuntimeResult<Value> {
+        let value = self.evaluate(expression)?;
+        self.environment
+            .assign(variable.value, value.clone())
+            .with_location(variable.location)?;
+        Ok(value)
     }
 
     fn evaluate_literal(&self, literal: Literal) -> Value {
@@ -71,11 +84,11 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_grouping(&self, e: Expression) -> RuntimeResult<Value> {
+    fn evaluate_grouping(&mut self, e: Expression) -> RuntimeResult<Value> {
         self.evaluate(e)
     }
 
-    fn evaluate_unary(&self, o: Located<UnaryOperator>, r: Expression) -> RuntimeResult<Value> {
+    fn evaluate_unary(&mut self, o: Located<UnaryOperator>, r: Expression) -> RuntimeResult<Value> {
         let right = self.evaluate(r)?;
 
         Ok(match o.value {
@@ -85,7 +98,7 @@ impl Interpreter {
     }
 
     fn evaluate_binary(
-        &self,
+        &mut self,
         left: Expression,
         operator: Located<BinaryOperator>,
         right: Expression,

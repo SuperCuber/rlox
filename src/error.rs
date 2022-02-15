@@ -26,6 +26,8 @@ pub enum ParseErrorKind {
     UnexpectedToken(Token, Token),
     #[error("invalid expression")]
     InvalidExpression,
+    #[error("invalid assignment target")]
+    InvalidLvalue,
 }
 
 pub type RuntimeError = Located<RuntimeErrorKind>;

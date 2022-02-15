@@ -91,7 +91,33 @@ impl Parser {
     }
 
     fn expression(&mut self) -> ParseResult<Expression> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> ParseResult<Expression> {
+        // Dirty trick: parse lvalue as rvalue
+        let expr = self.equality()?;
+
+        if self.matches(Token::Symbol(Symbol::Equal)) {
+            let equals = self.previous();
+            let value = self.assignment()?;
+
+            // Dirty trick continuation: turn rvalue into an lvalue
+            match expr {
+                Expression::Variable(v) => Ok(Expression::Assign(v, Box::new(value))),
+                _ => {
+                    self.errors.push(ParseError {
+                        location: equals.location,
+                        value: ParseErrorKind::InvalidLvalue,
+                    });
+                    // Return the lhs expression, ignoring rhs
+                    // this is fine because we pushed an error
+                    Ok(expr)
+                }
+            }
+        } else {
+            Ok(expr)
+        }
     }
 
     fn equality(&mut self) -> ParseResult<Expression> {

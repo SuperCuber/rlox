@@ -23,4 +23,14 @@ impl Environment {
             .cloned()
             .ok_or(RuntimeErrorKind::UndefinedVariable(name))
     }
+
+    pub fn assign(&mut self, name: String, value: Value) -> Result<(), RuntimeErrorKind> {
+        #[allow(clippy::map_entry)] // ew
+        if self.values.contains_key(&name) {
+            self.values.insert(name, value);
+            Ok(())
+        } else {
+            Err(RuntimeErrorKind::UndefinedVariable(name))
+        }
+    }
 }

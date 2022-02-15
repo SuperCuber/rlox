@@ -12,6 +12,8 @@ pub enum Expression {
     Literal(Literal),
     Unary(Located<UnaryOperator>, Box<Expression>),
     Variable(Located<String>),
+    // TODO: I dont like assignment being an expression. I want it to be a statement.
+    Assign(Located<String>, Box<Expression>),
 }
 
 #[derive(Debug)]
