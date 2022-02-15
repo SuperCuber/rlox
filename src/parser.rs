@@ -214,7 +214,7 @@ impl Parser {
             self.consume(Token::Symbol(Symbol::RightParen))?;
             Ok(Expression::Grouping(Box::new(expr)))
         } else {
-            Err(Located {
+            Err(ParseError {
                 location: self.tokens[self.current].location,
                 value: ParseErrorKind::InvalidExpression,
             })
@@ -224,11 +224,14 @@ impl Parser {
     fn consume_identifier(&mut self) -> ParseResult<Located<String>> {
         let actual = self.peek();
         match actual.token {
-            Token::Identifier(i) => Ok(Located {
-                location: actual.location,
-                value: i,
-            }),
-            _ => Err(Located {
+            Token::Identifier(i) => {
+                self.advance();
+                Ok(Located {
+                    location: actual.location,
+                    value: i,
+                })
+            }
+            _ => Err(ParseError {
                 location: actual.location,
                 value: ParseErrorKind::UnexpectedToken(
                     actual.token,
@@ -244,7 +247,7 @@ impl Parser {
             Ok(self.advance())
         } else {
             let actual = self.peek();
-            Err(Located {
+            Err(ParseError {
                 location: actual.location,
                 value: ParseErrorKind::UnexpectedToken(actual.token, expected),
             })

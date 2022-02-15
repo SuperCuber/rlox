@@ -1,5 +1,5 @@
 use crate::{
-    error::{Located, TokenizeError, TokenizeErrorKind},
+    error::{TokenizeError, TokenizeErrorKind},
     token::{CodeToken, Keyword, Literal, Symbol, Token},
 };
 
@@ -127,7 +127,7 @@ impl Scanner {
             c if c.is_ascii_alphabetic() || c == '_' => self.word(),
 
             c => {
-                return Err(Located {
+                return Err(TokenizeError {
                     location: self.location(),
                     value: TokenizeErrorKind::InvalidStartOfToken(c),
                 })
@@ -187,7 +187,7 @@ impl Scanner {
         }
 
         if self.is_at_end() {
-            Err(Located {
+            Err(TokenizeError {
                 location: self.location(),
                 value: TokenizeErrorKind::UnterminatedString,
             })

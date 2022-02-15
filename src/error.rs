@@ -32,11 +32,11 @@ pub type RuntimeError = Located<RuntimeErrorKind>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeErrorKind {
-    #[error("invalid expression")]
+    #[error("expected type {0:?}, got {1:?}")]
     TypeError(Type, Type),
-    #[error("invalid expression")]
+    #[error("expected types {0:?}, got {1:?}")]
     TypeErrorMultiple(Vec<Type>, Type),
-    #[error("invalid expression")]
+    #[error("undefined variable `{0}`")]
     UndefinedVariable(String),
 }
 

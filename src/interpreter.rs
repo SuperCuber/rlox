@@ -1,5 +1,6 @@
 use crate::{
     ast::{BinaryOperator, Expression, Statement, UnaryOperator},
+    environment::Environment,
     error::{Located, RuntimeError, RuntimeErrorKind, WithLocation},
     token::Literal,
     value::{Type, Value},
@@ -7,11 +8,15 @@ use crate::{
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
-pub struct Interpreter;
+pub struct Interpreter {
+    environment: Environment,
+}
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter
+        Interpreter {
+            environment: Environment::new(),
+        }
     }
 
     pub fn interpret(&mut self, program: Vec<Statement>) -> RuntimeResult<()> {
@@ -28,9 +33,23 @@ impl Interpreter {
                 println!("{}", self.evaluate(expr)?);
                 Ok(())
             }
-            // TODO: remove
-            _ => todo!(),
+            Statement::Var(name, value) => self.execute_statement_var(name, value),
         }
+    }
+
+    fn execute_statement_var(
+        &mut self,
+        name: String,
+        value: Option<Expression>,
+    ) -> Result<(), RuntimeError> {
+        let value = if let Some(e) = value {
+            self.evaluate(e)?
+        } else {
+            Value::Nil
+        };
+        self.environment.define(name, value);
+
+        Ok(())
     }
 
     fn evaluate(&self, expression: Expression) -> RuntimeResult<Value> {
@@ -39,7 +58,7 @@ impl Interpreter {
             Expression::Grouping(e) => self.evaluate_grouping(*e),
             Expression::Unary(o, r) => self.evaluate_unary(o, *r),
             Expression::Binary(l, o, r) => self.evaluate_binary(*l, o, *r),
-            Expression::Variable(_) => todo!(),
+            Expression::Variable(v) => self.environment.get(v.value).with_location(v.location),
         }
     }
 
@@ -110,7 +129,7 @@ impl Interpreter {
                     let right = right.into_string().with_location(loc)?;
                     Value::String(left + &right)
                 } else {
-                    return Err(Located {
+                    return Err(RuntimeError {
                         location: loc,
                         value: RuntimeErrorKind::TypeErrorMultiple(
                             vec![Type::Number, Type::String],

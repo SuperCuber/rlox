@@ -15,12 +15,6 @@ pub enum Expression {
 }
 
 #[derive(Debug)]
-pub struct CodeUnaryOperator {
-    pub location: (usize, usize),
-    pub op: UnaryOperator,
-}
-
-#[derive(Debug)]
 pub enum UnaryOperator {
     Minus,
     Not,
@@ -34,12 +28,6 @@ impl UnaryOperator {
             _ => None,
         }
     }
-}
-
-#[derive(Debug)]
-pub struct CodeBinaryOperator {
-    pub location: (usize, usize),
-    pub op: BinaryOperator,
 }
 
 #[derive(Debug)]
