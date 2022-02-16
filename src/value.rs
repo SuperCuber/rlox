@@ -90,10 +90,10 @@ impl Display for Value {
                 }
             }
             Value::Boolean(b) => write!(f, "{b}"),
-            Value::Callable(LoxCallable::NativeFunction(name, _, _)) => {
+            Value::Callable(LoxCallable::NativeFunction(name, ..)) => {
                 write!(f, "<native function {name}>")
             }
-            Value::Callable(LoxCallable::LoxFunction(name, _, _)) => {
+            Value::Callable(LoxCallable::LoxFunction { name, .. }) => {
                 write!(f, "<function {name}>")
             }
             Value::Nil => write!(f, "nil"),
@@ -105,18 +105,22 @@ type Function = Rc<Box<dyn Fn(&mut Interpreter, Vec<Value>) -> RuntimeResult<Val
 
 #[derive(Clone)]
 pub enum LoxCallable {
-    LoxFunction(String, Vec<String>, Vec<Statement>),
+    LoxFunction {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Statement>,
+    },
     NativeFunction(String, usize, Function),
 }
 
 impl Debug for LoxCallable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::LoxFunction(arg0, arg1, arg2) => f
-                .debug_tuple("LoxFunction")
-                .field(arg0)
-                .field(arg1)
-                .field(arg2)
+            Self::LoxFunction { name, params, body } => f
+                .debug_struct("LoxFunction")
+                .field("name", name)
+                .field("params", params)
+                .field("body", body)
                 .finish(),
             Self::NativeFunction(arg0, arg1, _) => f
                 .debug_tuple("NativeFunction")
@@ -131,9 +135,10 @@ impl Debug for LoxCallable {
 impl PartialEq for LoxCallable {
     fn eq(&self, other: &LoxCallable) -> bool {
         match (self, other) {
-            (LoxCallable::LoxFunction(name1, ..), LoxCallable::LoxFunction(name2, ..)) => {
-                name1 == name2
-            }
+            (
+                LoxCallable::LoxFunction { name: name1, .. },
+                LoxCallable::LoxFunction { name: name2, .. },
+            ) => name1 == name2,
             (LoxCallable::NativeFunction(_, _, f1), LoxCallable::NativeFunction(_, _, f2)) => {
                 Rc::ptr_eq(f1, f2)
             }
@@ -145,7 +150,7 @@ impl PartialEq for LoxCallable {
 impl LoxCallable {
     pub fn call(self, interpreter: &mut Interpreter, args: Vec<Value>) -> RuntimeResult<Value> {
         match self {
-            LoxCallable::LoxFunction(_, params, body) => {
+            LoxCallable::LoxFunction { params, body, .. } => {
                 interpreter.environment.push_env();
                 for (param, arg) in params.into_iter().zip(args.into_iter()) {
                     interpreter.environment.define(param, arg)
@@ -167,7 +172,7 @@ impl LoxCallable {
 
     pub fn arity(&self) -> usize {
         match self {
-            LoxCallable::LoxFunction(_, params, _) => params.len(),
+            LoxCallable::LoxFunction { params, .. } => params.len(),
             LoxCallable::NativeFunction(_, a, _) => *a,
         }
     }

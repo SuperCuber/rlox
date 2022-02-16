@@ -115,7 +115,11 @@ impl Interpreter {
         params: Vec<String>,
         body: Vec<Statement>,
     ) -> RuntimeResult<()> {
-        let function = Value::Callable(LoxCallable::LoxFunction(name.clone(), params, body));
+        let function = Value::Callable(LoxCallable::LoxFunction {
+            name: name.clone(),
+            params,
+            body,
+        });
         self.environment.define(name, function);
         Ok(())
     }
