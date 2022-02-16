@@ -73,7 +73,9 @@ impl BinaryOperator {
 #[derive(Debug, Clone)]
 pub enum Statement {
     Expression(CodeExpression),
+    Function(String, Vec<String>, Vec<Statement>),
     Print(CodeExpression),
+    Return(Option<CodeExpression>),
     Var(String, Option<CodeExpression>),
     While(CodeExpression, Box<Statement>),
     Block(Vec<Statement>),

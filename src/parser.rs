@@ -12,6 +12,8 @@ pub struct Parser {
     errors: Vec<ParseError>,
 }
 
+const MAX_FUNCTION_ARGS: usize = 255;
+
 impl Parser {
     pub fn new(tokens: Vec<CodeToken>) -> Parser {
         Parser {
@@ -55,6 +57,8 @@ impl Parser {
     fn declaration(&mut self) -> Option<Statement> {
         let statement = if self.matches(Token::Keyword(Keyword::Var)) {
             self.var_declaration()
+        } else if self.matches(Token::Keyword(Keyword::Fun)) {
+            self.function("function")
         } else {
             self.statement()
         };
@@ -82,6 +86,31 @@ impl Parser {
         Ok(Statement::Var(name.value, initializer))
     }
 
+    fn function(&mut self, _kind: &'static str) -> ParseResult<Statement> {
+        let name = self.consume_identifier()?;
+        let left_paren = self.consume(Token::Symbol(Symbol::LeftParen))?;
+        let mut params = Vec::new();
+        if !self.check(Token::Symbol(Symbol::RightParen)) {
+            params.push(self.consume_identifier()?.value);
+            while self.matches(Token::Symbol(Symbol::Comma)) {
+                params.push(self.consume_identifier()?.value);
+                if params.len() > MAX_FUNCTION_ARGS {
+                    // Don't throw - we're in a valid state
+                    self.errors.push(ParseError {
+                        location: left_paren.location,
+                        value: ParseErrorKind::TooManyArguments(MAX_FUNCTION_ARGS),
+                    });
+                }
+            }
+        }
+        self.consume(Token::Symbol(Symbol::RightParen))?;
+
+        self.consume(Token::Symbol(Symbol::LeftBrace))?;
+        let body = self.block()?;
+
+        Ok(Statement::Function(name.value, params, body))
+    }
+
     fn statement(&mut self) -> ParseResult<Statement> {
         if self.matches(Token::Keyword(Keyword::If)) {
             self.if_statement()
@@ -89,6 +118,8 @@ impl Parser {
             self.for_statement()
         } else if self.matches(Token::Keyword(Keyword::While)) {
             self.while_statement()
+        } else if self.matches(Token::Keyword(Keyword::Return)) {
+            self.return_statement()
         } else if self.matches(Token::Keyword(Keyword::Print)) {
             self.print_statement()
         } else if self.matches(Token::Symbol(Symbol::LeftBrace)) {
@@ -129,14 +160,15 @@ impl Parser {
         };
 
         let condition = if self.check(Token::Symbol(Symbol::Semicolon)) {
-            let semicolon = self.consume(Token::Symbol(Symbol::Semicolon)).unwrap();
+            let semicolon = self.advance();
             CodeExpression {
                 location: semicolon.location,
                 value: Expression::Literal(Literal::Boolean(true)),
             }
         } else {
+            let expr = self.expression()?;
             self.consume(Token::Symbol(Symbol::Semicolon))?;
-            self.expression()?
+            expr
         };
 
         let increment = if !self.check(Token::Symbol(Symbol::RightParen)) {
@@ -168,6 +200,17 @@ impl Parser {
         let body = self.statement()?;
 
         Ok(Statement::While(condition, Box::new(body)))
+    }
+
+    fn return_statement(&mut self) -> ParseResult<Statement> {
+        let value = if self.check(Token::Symbol(Symbol::Semicolon)) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+
+        self.consume(Token::Symbol(Symbol::Semicolon))?;
+        Ok(Statement::Return(value))
     }
 
     fn print_statement(&mut self) -> ParseResult<Statement> {
@@ -384,11 +427,11 @@ impl Parser {
         if !self.check(Token::Symbol(Symbol::RightParen)) {
             arguments.push(self.expression()?);
             while self.matches(Token::Symbol(Symbol::Comma)) {
-                if arguments.len() >= 255 {
+                if arguments.len() > MAX_FUNCTION_ARGS {
                     // Don't throw - we're in a valid state
                     self.errors.push(ParseError {
                         location: left_paren.location,
-                        value: ParseErrorKind::TooManyArguments(255),
+                        value: ParseErrorKind::TooManyArguments(MAX_FUNCTION_ARGS),
                     });
                 }
                 arguments.push(self.expression()?);

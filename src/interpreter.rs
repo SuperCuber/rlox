@@ -11,7 +11,7 @@ use crate::{
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
 pub struct Interpreter {
-    environment: Environment,
+    pub environment: Environment,
 }
 
 impl Interpreter {
@@ -50,6 +50,8 @@ impl Interpreter {
                 self.execute_if(condition, *then_branch, else_branch)
             }
             Statement::While(condition, body) => self.execute_while(condition, *body),
+            Statement::Function(name, params, body) => self.execute_fun(name, params, body),
+            Statement::Return(expr) => self.execute_return(expr),
         }
     }
 
@@ -68,7 +70,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_block(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
+    pub fn execute_block(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
         self.environment.push_env();
         for statement in statements {
             if let Err(e) = self.execute(statement) {
@@ -105,6 +107,28 @@ impl Interpreter {
             self.execute(body.clone())?;
         }
         Ok(())
+    }
+
+    fn execute_fun(
+        &mut self,
+        name: String,
+        params: Vec<String>,
+        body: Vec<Statement>,
+    ) -> RuntimeResult<()> {
+        let function = Value::Callable(LoxCallable::LoxFunction(name.clone(), params, body));
+        self.environment.define(name, function);
+        Ok(())
+    }
+
+    fn execute_return(&mut self, expression: Option<CodeExpression>) -> RuntimeResult<()> {
+        let value = expression
+            .map(|e| self.evaluate(e))
+            .transpose()?
+            .unwrap_or(Value::Nil);
+        Err(RuntimeError {
+            location: (0, 0),
+            value: RuntimeErrorKind::Returning(value),
+        })
     }
 
     pub fn evaluate(&mut self, expression: CodeExpression) -> RuntimeResult<Value> {
@@ -237,7 +261,7 @@ impl Interpreter {
         callee: CodeExpression,
         args_expressions: Vec<CodeExpression>,
     ) -> RuntimeResult<Value> {
-        let mut callee = self
+        let callee = self
             .evaluate(callee)?
             .into_callable()
             .with_location(location)?;

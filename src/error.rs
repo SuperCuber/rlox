@@ -1,6 +1,9 @@
 use std::{error::Error, fmt::Display, io};
 
-use crate::{token::Token, value::Type};
+use crate::{
+    token::Token,
+    value::{Type, Value},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoxError {
@@ -56,6 +59,10 @@ pub enum RuntimeErrorKind {
     UndefinedVariable(String),
     #[error("wrong number of arguments: got {0}, expected {1}")]
     WrongArgsNum(usize, usize),
+
+    /// not actually an error
+    #[error("RETURNING, YOU SHOULD NEVER SEE THIS")]
+    Returning(Value),
 }
 
 impl<E: Error> Display for Located<E> {
