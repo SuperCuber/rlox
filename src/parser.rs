@@ -1,5 +1,5 @@
 use crate::{
-    ast::{BinaryOperator, Expression, Statement, UnaryOperator},
+    ast::{BinaryOperator, CodeExpression, Expression, Statement, UnaryOperator},
     error::{Located, ParseError, ParseErrorKind},
     token::{CodeToken, Keyword, Literal, Symbol, Token},
 };
@@ -35,7 +35,7 @@ impl Parser {
         }
     }
 
-    pub fn parse_expression(mut self) -> Result<Expression, Vec<ParseError>> {
+    pub fn parse_expression(mut self) -> Result<CodeExpression, Vec<ParseError>> {
         let expression = self.expression().map_err(|e| vec![e])?;
         if self.errors.is_empty() {
             if self.is_at_end() {
@@ -128,12 +128,16 @@ impl Parser {
             Some(self.expression_statement()?)
         };
 
-        let condition = if !self.check(Token::Symbol(Symbol::Semicolon)) {
-            self.expression()?
+        let condition = if self.check(Token::Symbol(Symbol::Semicolon)) {
+            let semicolon = self.consume(Token::Symbol(Symbol::Semicolon)).unwrap();
+            CodeExpression {
+                location: semicolon.location,
+                value: Expression::Literal(Literal::Boolean(true)),
+            }
         } else {
-            Expression::Literal(Literal::Boolean(true))
+            self.consume(Token::Symbol(Symbol::Semicolon))?;
+            self.expression()?
         };
-        self.consume(Token::Symbol(Symbol::Semicolon))?;
 
         let increment = if !self.check(Token::Symbol(Symbol::RightParen)) {
             Some(self.expression()?)
@@ -192,11 +196,11 @@ impl Parser {
         Ok(Statement::Expression(expr))
     }
 
-    fn expression(&mut self) -> ParseResult<Expression> {
+    fn expression(&mut self) -> ParseResult<CodeExpression> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> ParseResult<Expression> {
+    fn assignment(&mut self) -> ParseResult<CodeExpression> {
         // Dirty trick: parse lvalue as rvalue
         let expr = self.or()?;
 
@@ -205,8 +209,11 @@ impl Parser {
             let value = self.assignment()?;
 
             // Dirty trick continuation: turn rvalue into an lvalue
-            match expr {
-                Expression::Variable(v) => Ok(Expression::Assign(v, Box::new(value))),
+            match expr.value {
+                Expression::Variable(v) => Ok(CodeExpression {
+                    location: equals.location,
+                    value: Expression::Assign(v, Box::new(value)),
+                }),
                 _ => {
                     self.errors.push(ParseError {
                         location: equals.location,
@@ -222,45 +229,37 @@ impl Parser {
         }
     }
 
-    fn or(&mut self) -> ParseResult<Expression> {
+    fn or(&mut self) -> ParseResult<CodeExpression> {
         let mut expr = self.and()?;
 
         while self.matches(Token::Keyword(Keyword::Or)) {
             let operator = self.previous();
             let right = self.and()?;
-            expr = Expression::Binary(
-                Box::new(expr),
-                Located {
-                    location: operator.location,
-                    value: BinaryOperator::Or,
-                },
-                Box::new(right),
-            );
+            expr = CodeExpression {
+                location: operator.location,
+                value: Expression::Binary(Box::new(expr), BinaryOperator::Or, Box::new(right)),
+            };
         }
 
         Ok(expr)
     }
 
-    fn and(&mut self) -> ParseResult<Expression> {
+    fn and(&mut self) -> ParseResult<CodeExpression> {
         let mut expr = self.equality()?;
 
         while self.matches(Token::Keyword(Keyword::And)) {
             let operator = self.previous();
             let right = self.equality()?;
-            expr = Expression::Binary(
-                Box::new(expr),
-                Located {
-                    location: operator.location,
-                    value: BinaryOperator::And,
-                },
-                Box::new(right),
-            );
+            expr = CodeExpression {
+                location: operator.location,
+                value: Expression::Binary(Box::new(expr), BinaryOperator::And, Box::new(right)),
+            };
         }
 
         Ok(expr)
     }
 
-    fn equality(&mut self) -> ParseResult<Expression> {
+    fn equality(&mut self) -> ParseResult<CodeExpression> {
         let mut expr = self.comparison()?;
 
         // Short-circuiting is important here for correctness - otherwise this could match `!= ==`
@@ -270,20 +269,20 @@ impl Parser {
         {
             let operator = self.previous();
             let right = self.comparison()?;
-            expr = Expression::Binary(
-                Box::new(expr),
-                Located {
-                    location: operator.location,
-                    value: BinaryOperator::from_token(operator.token).unwrap(),
-                },
-                Box::new(right),
-            );
+            expr = CodeExpression {
+                location: operator.location,
+                value: Expression::Binary(
+                    Box::new(expr),
+                    BinaryOperator::from_token(operator.token).unwrap(),
+                    Box::new(right),
+                ),
+            };
         }
 
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> ParseResult<Expression> {
+    fn comparison(&mut self) -> ParseResult<CodeExpression> {
         let mut expr = self.term()?;
 
         while self.matches(Token::Symbol(Symbol::Greater))
@@ -293,20 +292,20 @@ impl Parser {
         {
             let operator = self.previous();
             let right = self.term()?;
-            expr = Expression::Binary(
-                Box::new(expr),
-                Located {
-                    location: operator.location,
-                    value: BinaryOperator::from_token(operator.token).unwrap(),
-                },
-                Box::new(right),
-            );
+            expr = CodeExpression {
+                location: operator.location,
+                value: Expression::Binary(
+                    Box::new(expr),
+                    BinaryOperator::from_token(operator.token).unwrap(),
+                    Box::new(right),
+                ),
+            };
         }
 
         Ok(expr)
     }
 
-    fn term(&mut self) -> ParseResult<Expression> {
+    fn term(&mut self) -> ParseResult<CodeExpression> {
         let mut expr = self.factor()?;
 
         while self.matches(Token::Symbol(Symbol::Minus))
@@ -314,20 +313,20 @@ impl Parser {
         {
             let operator = self.previous();
             let right = self.factor()?;
-            expr = Expression::Binary(
-                Box::new(expr),
-                Located {
-                    location: operator.location,
-                    value: BinaryOperator::from_token(operator.token).unwrap(),
-                },
-                Box::new(right),
-            );
+            expr = CodeExpression {
+                location: operator.location,
+                value: Expression::Binary(
+                    Box::new(expr),
+                    BinaryOperator::from_token(operator.token).unwrap(),
+                    Box::new(right),
+                ),
+            };
         }
 
         Ok(expr)
     }
 
-    fn factor(&mut self) -> ParseResult<Expression> {
+    fn factor(&mut self) -> ParseResult<CodeExpression> {
         let mut expr = self.unary()?;
 
         while self.matches(Token::Symbol(Symbol::Slash))
@@ -335,50 +334,60 @@ impl Parser {
         {
             let operator = self.previous();
             let right = self.unary()?;
-            expr = Expression::Binary(
-                Box::new(expr),
-                Located {
-                    location: operator.location,
-                    value: BinaryOperator::from_token(operator.token).unwrap(),
-                },
-                Box::new(right),
-            );
+            expr = CodeExpression {
+                location: operator.location,
+                value: Expression::Binary(
+                    Box::new(expr),
+                    BinaryOperator::from_token(operator.token).unwrap(),
+                    Box::new(right),
+                ),
+            };
         }
 
         Ok(expr)
     }
 
-    fn unary(&mut self) -> ParseResult<Expression> {
+    fn unary(&mut self) -> ParseResult<CodeExpression> {
         if self.matches(Token::Symbol(Symbol::Bang)) || self.matches(Token::Symbol(Symbol::Minus)) {
             let operator = self.previous();
             let right = self.unary()?;
-            Ok(Expression::Unary(
-                Located {
-                    location: operator.location,
-                    value: UnaryOperator::from_token(operator.token).unwrap(),
-                },
-                Box::new(right),
-            ))
+            Ok(CodeExpression {
+                location: operator.location,
+                value: Expression::Unary(
+                    UnaryOperator::from_token(operator.token).unwrap(),
+                    Box::new(right),
+                ),
+            })
         } else {
             Ok(self.primary()?)
         }
     }
 
-    fn primary(&mut self) -> ParseResult<Expression> {
+    fn primary(&mut self) -> ParseResult<CodeExpression> {
         if let CodeToken {
             token: Token::Literal(l),
+            location,
             ..
         } = &self.tokens[self.current]
         {
             // manual advance() as part of the manual matches()
             self.current += 1;
-            Ok(Expression::Literal(l.clone()))
+            Ok(CodeExpression {
+                location: *location,
+                value: Expression::Literal(l.clone()),
+            })
         } else if let Ok(identifier) = self.consume_identifier() {
-            Ok(Expression::Variable(identifier))
-        } else if self.matches(Token::Symbol(Symbol::LeftParen)) {
+            Ok(CodeExpression {
+                location: identifier.location,
+                value: Expression::Variable(identifier.value),
+            })
+        } else if let Ok(left_paren) = self.consume(Token::Symbol(Symbol::LeftParen)) {
             let expr = self.expression()?;
             self.consume(Token::Symbol(Symbol::RightParen))?;
-            Ok(Expression::Grouping(Box::new(expr)))
+            Ok(CodeExpression {
+                location: left_paren.location,
+                value: Expression::Grouping(Box::new(expr)),
+            })
         } else {
             Err(ParseError {
                 location: self.tokens[self.current].location,

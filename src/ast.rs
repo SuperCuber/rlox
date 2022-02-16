@@ -5,15 +5,17 @@ use crate::{
 
 // Expressions
 
+pub type CodeExpression = Located<Expression>;
+
 #[derive(Debug, Clone)]
 pub enum Expression {
-    Binary(Box<Expression>, Located<BinaryOperator>, Box<Expression>),
-    Grouping(Box<Expression>),
+    Binary(Box<CodeExpression>, BinaryOperator, Box<CodeExpression>),
+    Grouping(Box<CodeExpression>),
     Literal(Literal),
-    Unary(Located<UnaryOperator>, Box<Expression>),
-    Variable(Located<String>),
+    Unary(UnaryOperator, Box<CodeExpression>),
+    Variable(String),
     // TODO: I dont like assignment being an expression. I want it to be a statement.
-    Assign(Located<String>, Box<Expression>),
+    Assign(String, Box<CodeExpression>),
 }
 
 #[derive(Debug, Clone)]
@@ -69,10 +71,10 @@ impl BinaryOperator {
 // Statements
 #[derive(Debug, Clone)]
 pub enum Statement {
-    Expression(Expression),
-    Print(Expression),
-    Var(String, Option<Expression>),
-    While(Expression, Box<Statement>),
+    Expression(CodeExpression),
+    Print(CodeExpression),
+    Var(String, Option<CodeExpression>),
+    While(CodeExpression, Box<Statement>),
     Block(Vec<Statement>),
-    If(Expression, Box<Statement>, Option<Box<Statement>>),
+    If(CodeExpression, Box<Statement>, Option<Box<Statement>>),
 }

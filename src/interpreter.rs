@@ -1,7 +1,7 @@
 use crate::{
-    ast::{BinaryOperator, Expression, Statement, UnaryOperator},
+    ast::{BinaryOperator, CodeExpression, Expression, Statement, UnaryOperator},
     environment::Environment,
-    error::{Located, RuntimeError, RuntimeErrorKind, WithLocation},
+    error::{RuntimeError, RuntimeErrorKind, WithLocation},
     token::Literal,
     value::{Type, Value},
 };
@@ -45,7 +45,7 @@ impl Interpreter {
     fn execute_statement_var(
         &mut self,
         name: String,
-        value: Option<Expression>,
+        value: Option<CodeExpression>,
     ) -> Result<(), RuntimeError> {
         let value = if let Some(e) = value {
             self.evaluate(e)?
@@ -71,13 +71,13 @@ impl Interpreter {
 
     fn execute_if(
         &mut self,
-        condition: Expression,
+        condition: CodeExpression,
         then_branch: Statement,
         else_branch: Option<Box<Statement>>,
     ) -> RuntimeResult<()> {
+        let location = condition.location;
         let condition = self.evaluate(condition)?;
-        // TODO oh no
-        if condition.into_boolean().with_location((0, 0))? {
+        if condition.into_boolean().with_location(location)? {
             self.execute(then_branch)?;
         } else if let Some(else_branch) = else_branch {
             self.execute(*else_branch)?;
@@ -85,38 +85,39 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_while(&mut self, condition: Expression, body: Statement) -> RuntimeResult<()> {
-        // TODO oh no
+    fn execute_while(&mut self, condition: CodeExpression, body: Statement) -> RuntimeResult<()> {
         while self
             .evaluate(condition.clone())?
             .into_boolean()
-            .with_location((0, 0))?
+            .with_location(condition.location)?
         {
             self.execute(body.clone())?;
         }
         Ok(())
     }
 
-    pub fn evaluate(&mut self, expression: Expression) -> RuntimeResult<Value> {
-        match expression {
+    pub fn evaluate(&mut self, expression: CodeExpression) -> RuntimeResult<Value> {
+        let loc = expression.location;
+        match expression.value {
             Expression::Literal(l) => Ok(self.evaluate_literal(l)),
-            Expression::Grouping(e) => self.evaluate_grouping(*e),
-            Expression::Unary(o, r) => self.evaluate_unary(o, *r),
-            Expression::Binary(l, o, r) => self.evaluate_binary(*l, o, *r),
-            Expression::Variable(v) => self.environment.get(v.value).with_location(v.location),
-            Expression::Assign(v, e) => self.evaluate_assign(v, *e),
+            Expression::Assign(v, e) => self.evaluate_assign(loc, v, *e),
+            Expression::Grouping(e) => self.evaluate(*e),
+            Expression::Unary(o, r) => self.evaluate_unary(loc, o, *r),
+            Expression::Binary(l, o, r) => self.evaluate_binary(loc, *l, o, *r),
+            Expression::Variable(v) => self.environment.get(v).with_location(loc),
         }
     }
 
     fn evaluate_assign(
         &mut self,
-        variable: Located<String>,
-        expression: Expression,
+        location: (usize, usize),
+        variable: String,
+        expression: CodeExpression,
     ) -> RuntimeResult<Value> {
         let value = self.evaluate(expression)?;
         self.environment
-            .assign(variable.value, value.clone())
-            .with_location(variable.location)?;
+            .assign(variable, value.clone())
+            .with_location(location)?;
         Ok(value)
     }
 
@@ -129,92 +130,92 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_grouping(&mut self, e: Expression) -> RuntimeResult<Value> {
-        self.evaluate(e)
-    }
-
-    fn evaluate_unary(&mut self, o: Located<UnaryOperator>, r: Expression) -> RuntimeResult<Value> {
+    fn evaluate_unary(
+        &mut self,
+        location: (usize, usize),
+        o: UnaryOperator,
+        r: CodeExpression,
+    ) -> RuntimeResult<Value> {
         let right = self.evaluate(r)?;
 
-        Ok(match o.value {
-            UnaryOperator::Minus => Value::Number(-right.into_number().with_location(o.location)?),
-            UnaryOperator::Not => Value::Boolean(!right.into_boolean().with_location(o.location)?),
+        Ok(match o {
+            UnaryOperator::Minus => Value::Number(-right.into_number().with_location(location)?),
+            UnaryOperator::Not => Value::Boolean(!right.into_boolean().with_location(location)?),
         })
     }
 
     fn evaluate_binary(
         &mut self,
-        left: Expression,
-        operator: Located<BinaryOperator>,
-        right: Expression,
+        location: (usize, usize),
+        left: CodeExpression,
+        operator: BinaryOperator,
+        right: CodeExpression,
     ) -> RuntimeResult<Value> {
         let left = self.evaluate(left)?;
         let right = self.evaluate(right)?;
-        let loc = operator.location;
-        Ok(match operator.value {
-            // Math
-            BinaryOperator::Subtract => Value::Number(
-                left.into_number().with_location(loc)? - right.into_number().with_location(loc)?,
-            ),
-            BinaryOperator::Divide => Value::Number(
-                left.into_number().with_location(loc)? / right.into_number().with_location(loc)?,
-            ),
-            BinaryOperator::Multiply => Value::Number(
-                left.into_number().with_location(loc)? * right.into_number().with_location(loc)?,
-            ),
-            // Comparison
-            BinaryOperator::Less => Value::Boolean(
-                left.into_number().with_location(loc)? < right.into_number().with_location(loc)?,
-            ),
-            BinaryOperator::LessEquals => Value::Boolean(
-                left.into_number().with_location(loc)? <= right.into_number().with_location(loc)?,
-            ),
-            BinaryOperator::Greater => Value::Boolean(
-                left.into_number().with_location(loc)? > right.into_number().with_location(loc)?,
-            ),
-            BinaryOperator::GreaterEquals => Value::Boolean(
-                left.into_number().with_location(loc)? >= right.into_number().with_location(loc)?,
-            ),
-            // Equality
-            BinaryOperator::Equals => Value::Boolean(left == right),
-            BinaryOperator::NotEquals => Value::Boolean(left != right),
-            // Logical - short circuiting
-            BinaryOperator::And => {
-                let left = left.into_boolean().with_location(loc)?;
-                let right = right.into_boolean().with_location(loc)?;
-                if !left {
-                    Value::Boolean(false)
-                } else {
-                    Value::Boolean(right)
+
+        // budget try-catch
+        let res: Result<Value, RuntimeErrorKind> = (|| {
+            let res = match operator {
+                // Math
+                BinaryOperator::Subtract => {
+                    Value::Number(left.into_number()? - right.into_number()?)
                 }
-            }
-            BinaryOperator::Or => {
-                let left = left.into_boolean().with_location(loc)?;
-                let right = right.into_boolean().with_location(loc)?;
-                if left {
-                    Value::Boolean(true)
-                } else {
-                    Value::Boolean(right)
+                BinaryOperator::Divide => Value::Number(left.into_number()? / right.into_number()?),
+                BinaryOperator::Multiply => {
+                    Value::Number(left.into_number()? * right.into_number()?)
                 }
-            }
-            // Add
-            BinaryOperator::Add => {
-                if let Ok(left) = left.clone().into_number().with_location(loc) {
-                    let right = right.into_number().with_location(loc)?;
-                    Value::Number(left + right)
-                } else if let Ok(left) = left.clone().into_string().with_location(loc) {
-                    let right = right.into_string().with_location(loc)?;
-                    Value::String(left + &right)
-                } else {
-                    return Err(RuntimeError {
-                        location: loc,
-                        value: RuntimeErrorKind::TypeErrorMultiple(
+                // Comparison
+                BinaryOperator::Less => Value::Boolean(left.into_number()? < right.into_number()?),
+                BinaryOperator::LessEquals => {
+                    Value::Boolean(left.into_number()? <= right.into_number()?)
+                }
+                BinaryOperator::Greater => {
+                    Value::Boolean(left.into_number()? > right.into_number()?)
+                }
+                BinaryOperator::GreaterEquals => {
+                    Value::Boolean(left.into_number()? >= right.into_number()?)
+                }
+                // Equality
+                BinaryOperator::Equals => Value::Boolean(left == right),
+                BinaryOperator::NotEquals => Value::Boolean(left != right),
+                // Logical - short circuiting
+                BinaryOperator::And => {
+                    let left = left.into_boolean()?;
+                    let right = right.into_boolean()?;
+                    if !left {
+                        Value::Boolean(false)
+                    } else {
+                        Value::Boolean(right)
+                    }
+                }
+                BinaryOperator::Or => {
+                    let left = left.into_boolean()?;
+                    let right = right.into_boolean()?;
+                    if left {
+                        Value::Boolean(true)
+                    } else {
+                        Value::Boolean(right)
+                    }
+                }
+                // Add
+                BinaryOperator::Add => {
+                    if let Ok(left) = left.clone().into_number() {
+                        let right = right.into_number()?;
+                        Value::Number(left + right)
+                    } else if let Ok(left) = left.clone().into_string() {
+                        let right = right.into_string()?;
+                        Value::String(left + &right)
+                    } else {
+                        return Err(RuntimeErrorKind::TypeErrorMultiple(
                             vec![Type::Number, Type::String],
                             left.value_type(),
-                        ),
-                    });
+                        ));
+                    }
                 }
-            }
-        })
+            };
+            Ok(res)
+        })();
+        res.with_location(location)
     }
 }
