@@ -10,6 +10,7 @@ pub type CodeExpression = Located<Expression>;
 #[derive(Debug, Clone)]
 pub enum Expression {
     Binary(Box<CodeExpression>, BinaryOperator, Box<CodeExpression>),
+    Call(Box<CodeExpression>, Vec<CodeExpression>),
     Grouping(Box<CodeExpression>),
     Literal(Literal),
     Unary(UnaryOperator, Box<CodeExpression>),

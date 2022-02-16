@@ -40,6 +40,8 @@ pub enum ParseErrorKind {
     InvalidExpression,
     #[error("invalid assignment target")]
     InvalidLvalue,
+    #[error("too many arguments (maximum is {0})")]
+    TooManyArguments(usize),
 }
 
 pub type RuntimeError = Located<RuntimeErrorKind>;
@@ -52,6 +54,8 @@ pub enum RuntimeErrorKind {
     TypeErrorMultiple(Vec<Type>, Type),
     #[error("undefined variable `{0}`")]
     UndefinedVariable(String),
+    #[error("wrong number of arguments: got {0}, expected {1}")]
+    WrongArgsNum(usize, usize),
 }
 
 impl<E: Error> Display for Located<E> {

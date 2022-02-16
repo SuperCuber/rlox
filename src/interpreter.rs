@@ -1,9 +1,11 @@
+use std::rc::Rc;
+
 use crate::{
     ast::{BinaryOperator, CodeExpression, Expression, Statement, UnaryOperator},
     environment::Environment,
     error::{RuntimeError, RuntimeErrorKind, WithLocation},
     token::Literal,
-    value::{Type, Value},
+    value::{LoxCallable, Type, Value},
 };
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
@@ -14,8 +16,17 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Interpreter {
+        let mut globals = Environment::new();
+        globals.define(
+            "clock".into(),
+            Value::Callable(LoxCallable::NativeFunction(
+                "clock".into(),
+                0,
+                Rc::new(Box::new(clock)),
+            )),
+        );
         Interpreter {
-            environment: Environment::new(),
+            environment: globals,
         }
     }
 
@@ -105,6 +116,7 @@ impl Interpreter {
             Expression::Unary(o, r) => self.evaluate_unary(loc, o, *r),
             Expression::Binary(l, o, r) => self.evaluate_binary(loc, *l, o, *r),
             Expression::Variable(v) => self.environment.get(v).with_location(loc),
+            Expression::Call(c, a) => self.evaluate_call(loc, *c, a),
         }
     }
 
@@ -218,4 +230,34 @@ impl Interpreter {
         })();
         res.with_location(location)
     }
+
+    fn evaluate_call(
+        &mut self,
+        location: (usize, usize),
+        callee: CodeExpression,
+        args_expressions: Vec<CodeExpression>,
+    ) -> RuntimeResult<Value> {
+        let mut callee = self
+            .evaluate(callee)?
+            .into_callable()
+            .with_location(location)?;
+
+        let mut args = Vec::new();
+        for arg in args_expressions {
+            args.push(self.evaluate(arg)?);
+        }
+
+        if args.len() != callee.arity() {
+            return Err(RuntimeError {
+                location,
+                value: RuntimeErrorKind::WrongArgsNum(args.len(), callee.arity()),
+            });
+        }
+
+        callee.call(self, args)
+    }
+}
+
+fn clock(_interpreter: &mut Interpreter, _args: Vec<Value>) -> RuntimeResult<Value> {
+    todo!()
 }

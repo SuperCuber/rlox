@@ -359,8 +359,47 @@ impl Parser {
                 ),
             })
         } else {
-            Ok(self.primary()?)
+            Ok(self.call()?)
         }
+    }
+
+    fn call(&mut self) -> ParseResult<CodeExpression> {
+        let mut expr = self.primary()?;
+
+        // match x()()() for example
+        while let Ok(p) = self.consume(Token::Symbol(Symbol::LeftParen)) {
+            expr = self.finish_call(expr, p)?;
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(
+        &mut self,
+        callee: CodeExpression,
+        left_paren: CodeToken,
+    ) -> ParseResult<CodeExpression> {
+        let mut arguments = Vec::new();
+
+        if !self.check(Token::Symbol(Symbol::RightParen)) {
+            arguments.push(self.expression()?);
+            while self.matches(Token::Symbol(Symbol::Comma)) {
+                if arguments.len() >= 255 {
+                    // Don't throw - we're in a valid state
+                    self.errors.push(ParseError {
+                        location: left_paren.location,
+                        value: ParseErrorKind::TooManyArguments(255),
+                    });
+                }
+                arguments.push(self.expression()?);
+            }
+        }
+
+        self.consume(Token::Symbol(Symbol::RightParen))?;
+        Ok(CodeExpression {
+            location: left_paren.location,
+            value: Expression::Call(Box::new(callee), arguments),
+        })
     }
 
     fn primary(&mut self) -> ParseResult<CodeExpression> {

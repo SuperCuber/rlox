@@ -1,12 +1,16 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
-use crate::error::RuntimeErrorKind;
+use crate::{
+    error::RuntimeErrorKind,
+    interpreter::{Interpreter, RuntimeResult},
+};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Value {
     String(String),
     Number(f32),
     Boolean(bool),
+    Callable(LoxCallable),
     Nil,
 }
 
@@ -15,6 +19,7 @@ pub enum Type {
     String,
     Number,
     Boolean,
+    Callable,
     Nil,
 }
 
@@ -40,11 +45,19 @@ impl Value {
         }
     }
 
+    pub fn into_callable(self) -> Result<LoxCallable, RuntimeErrorKind> {
+        match self {
+            Value::Callable(s) => Ok(s),
+            v => Err(RuntimeErrorKind::TypeError(Type::Callable, v.value_type())),
+        }
+    }
+
     pub fn value_type(&self) -> Type {
         match self {
             Value::String(_) => Type::String,
             Value::Number(_) => Type::Number,
             Value::Boolean(_) => Type::Boolean,
+            Value::Callable(_) => Type::Callable,
             Value::Nil => Type::Nil,
         }
     }
@@ -76,7 +89,50 @@ impl Display for Value {
                 }
             }
             Value::Boolean(b) => write!(f, "{b}"),
+            Value::Callable(LoxCallable::NativeFunction(name, _, _)) => {
+                write!(f, "<native function {name}>")
+            }
+            Value::Callable(LoxCallable::LoxFunction(_)) => {
+                write!(f, "<function>")
+            }
             Value::Nil => write!(f, "nil"),
         }
+    }
+}
+
+type Function = Rc<Box<dyn Fn(&mut Interpreter, Vec<Value>) -> RuntimeResult<Value>>>;
+
+#[derive(Clone)]
+pub enum LoxCallable {
+    LoxFunction(Function),
+    NativeFunction(String, usize, Function),
+}
+
+impl PartialEq for LoxCallable {
+    fn eq(&self, other: &LoxCallable) -> bool {
+        match (self, other) {
+            (LoxCallable::LoxFunction(f1), LoxCallable::LoxFunction(f2)) => Rc::ptr_eq(f1, f2),
+            (LoxCallable::NativeFunction(_, _, f1), LoxCallable::NativeFunction(_, _, f2)) => {
+                Rc::ptr_eq(f1, f2)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl LoxCallable {
+    pub fn call(
+        &mut self,
+        interpreter: &mut Interpreter,
+        args: Vec<Value>,
+    ) -> RuntimeResult<Value> {
+        match self {
+            LoxCallable::LoxFunction(fun) => fun(interpreter, args),
+            LoxCallable::NativeFunction(_, _, fun) => fun(interpreter, args),
+        }
+    }
+
+    pub fn arity(&self) -> usize {
+        todo!()
     }
 }
