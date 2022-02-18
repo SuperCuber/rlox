@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Display, io};
 
 use crate::{
     token::Token,
-    value::{Type, Value},
+    value::{SharedValue, Type},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -62,7 +62,7 @@ pub enum RuntimeErrorKind {
 
     /// not actually an error
     #[error("RETURNING, YOU SHOULD NEVER SEE THIS")]
-    Returning(Value),
+    Returning(SharedValue),
 }
 
 impl<E: Error> Display for Located<E> {
