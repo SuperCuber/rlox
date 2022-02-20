@@ -1,12 +1,10 @@
-use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
+use std::collections::{btree_map::Entry, BTreeMap};
 
-use crate::{error::RuntimeErrorKind, value::SharedValue};
+use crate::{error::RuntimeErrorKind, value::Value};
 
-// Clone is half-deep: variable contents are actually shared, but the mapping is cloned
-#[derive(Debug, Clone)]
 pub struct Environment {
     enclosing: Option<Box<Environment>>,
-    values: BTreeMap<String, Rc<RefCell<SharedValue>>>,
+    values: BTreeMap<String, Value>,
 }
 
 impl Environment {
@@ -17,24 +15,26 @@ impl Environment {
         }
     }
 
-    pub fn new_inside(enclosing: Environment) -> Environment {
-        Environment {
-            values: BTreeMap::new(),
-            enclosing: Some(Box::new(enclosing)),
-        }
+    pub fn push_env(&mut self) {
+        let mut enclosing = Environment::new();
+        std::mem::swap(self, &mut enclosing);
+        // Old environment is in `enclosing`, new environment is self
+        self.enclosing = Some(Box::new(enclosing));
     }
 
-    pub fn pop(self) -> Option<Environment> {
-        self.enclosing.map(|e| *e)
+    pub fn pop_env(&mut self) {
+        let mut enclosing = self.enclosing.take().unwrap();
+        std::mem::swap(self, &mut enclosing);
+        // Enclosing now is self, self in the enclosing variable and will be dropped
     }
 
-    pub fn define(&mut self, name: String, value: SharedValue) {
-        self.values.insert(name, Rc::new(RefCell::new(value)));
+    pub fn define(&mut self, name: String, value: Value) {
+        self.values.insert(name, value);
     }
 
-    pub fn get(&self, name: String) -> Result<SharedValue, RuntimeErrorKind> {
+    pub fn get(&self, name: String) -> Result<Value, RuntimeErrorKind> {
         match self.values.get(&name) {
-            Some(v) => Ok(v.borrow().clone()),
+            Some(v) => Ok(v.clone()),
             None => match &self.enclosing {
                 Some(e) => e.get(name),
                 None => Err(RuntimeErrorKind::UndefinedVariable(name)),
@@ -42,13 +42,13 @@ impl Environment {
         }
     }
 
-    pub fn assign(&self, name: String, value: SharedValue) -> Result<(), RuntimeErrorKind> {
-        match self.values.get(&name) {
-            Some(v) => {
-                *v.borrow_mut() = value;
+    pub fn assign(&mut self, name: String, value: Value) -> Result<(), RuntimeErrorKind> {
+        match self.values.entry(name.clone()) {
+            Entry::Occupied(mut e) => {
+                e.insert(value);
                 Ok(())
             }
-            None => match &self.enclosing {
+            Entry::Vacant(_) => match &mut self.enclosing {
                 Some(enc) => enc.assign(name, value),
                 None => Err(RuntimeErrorKind::UndefinedVariable(name)),
             },

@@ -2,17 +2,11 @@ use std::{fmt::Debug, fmt::Display, rc::Rc};
 
 use crate::{
     ast::Statement,
-    environment::Environment,
     error::{RuntimeError, RuntimeErrorKind},
     interpreter::{Interpreter, RuntimeResult},
 };
 
-pub type SharedValue = Rc<Value>;
-pub fn shared(x: Value) -> SharedValue {
-    Rc::new(x)
-}
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     String(String),
     Number(f32),
@@ -31,28 +25,28 @@ pub enum Type {
 }
 
 impl Value {
-    pub fn as_string(&self) -> Result<&str, RuntimeErrorKind> {
+    pub fn into_string(self) -> Result<String, RuntimeErrorKind> {
         match self {
             Value::String(s) => Ok(s),
             v => Err(RuntimeErrorKind::TypeError(Type::String, v.value_type())),
         }
     }
 
-    pub fn as_number(&self) -> Result<f32, RuntimeErrorKind> {
+    pub fn into_number(self) -> Result<f32, RuntimeErrorKind> {
         match self {
-            Value::Number(s) => Ok(*s),
+            Value::Number(s) => Ok(s),
             v => Err(RuntimeErrorKind::TypeError(Type::Number, v.value_type())),
         }
     }
 
-    pub fn as_boolean(&self) -> Result<bool, RuntimeErrorKind> {
+    pub fn into_boolean(self) -> Result<bool, RuntimeErrorKind> {
         match self {
-            Value::Boolean(s) => Ok(*s),
+            Value::Boolean(s) => Ok(s),
             v => Err(RuntimeErrorKind::TypeError(Type::Boolean, v.value_type())),
         }
     }
 
-    pub fn as_callable(&self) -> Result<&LoxCallable, RuntimeErrorKind> {
+    pub fn into_callable(self) -> Result<LoxCallable, RuntimeErrorKind> {
         match self {
             Value::Callable(s) => Ok(s),
             v => Err(RuntimeErrorKind::TypeError(Type::Callable, v.value_type())),
@@ -107,14 +101,14 @@ impl Display for Value {
     }
 }
 
-type Function = Box<dyn Fn(&mut Interpreter, Vec<SharedValue>) -> RuntimeResult<SharedValue>>;
+type Function = Rc<Box<dyn Fn(&mut Interpreter, Vec<Value>) -> RuntimeResult<Value>>>;
 
+#[derive(Clone)]
 pub enum LoxCallable {
     LoxFunction {
         name: String,
         params: Vec<String>,
         body: Vec<Statement>,
-        closure: Environment,
     },
     NativeFunction(String, usize, Function),
 }
@@ -122,17 +116,11 @@ pub enum LoxCallable {
 impl Debug for LoxCallable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::LoxFunction {
-                name,
-                params,
-                body: _,
-                closure: _,
-            } => f
+            Self::LoxFunction { name, params, body } => f
                 .debug_struct("LoxFunction")
                 .field("name", name)
                 .field("params", params)
-                // .field("body", body)
-                // .field("closure", &closure.borrow())
+                .field("body", body)
                 .finish(),
             Self::NativeFunction(arg0, arg1, _) => f
                 .debug_tuple("NativeFunction")
@@ -145,36 +133,32 @@ impl Debug for LoxCallable {
 }
 
 impl PartialEq for LoxCallable {
-    fn eq(&self, _other: &LoxCallable) -> bool {
-        // TODO: fix this by comparing the references first in Binary -> Equals
-        false
+    fn eq(&self, other: &LoxCallable) -> bool {
+        match (self, other) {
+            (
+                LoxCallable::LoxFunction { name: name1, .. },
+                LoxCallable::LoxFunction { name: name2, .. },
+            ) => name1 == name2,
+            (LoxCallable::NativeFunction(_, _, f1), LoxCallable::NativeFunction(_, _, f2)) => {
+                Rc::ptr_eq(f1, f2)
+            }
+            _ => false,
+        }
     }
 }
 
 impl LoxCallable {
-    pub fn call(
-        &self,
-        interpreter: &mut Interpreter,
-        args: Vec<SharedValue>,
-    ) -> RuntimeResult<SharedValue> {
+    pub fn call(self, interpreter: &mut Interpreter, args: Vec<Value>) -> RuntimeResult<Value> {
         match self {
-            LoxCallable::LoxFunction {
-                params,
-                body,
-                closure,
-                ..
-            } => {
-                // Environment chain:
-                // Current -> Closure -> Params -> Body
-                let mut param_env = Environment::new_inside(closure.clone());
-                for (param, arg) in params.iter().zip(args.into_iter()) {
-                    param_env.define(param.clone(), arg)
+            LoxCallable::LoxFunction { params, body, .. } => {
+                interpreter.environment.push_env();
+                for (param, arg) in params.into_iter().zip(args.into_iter()) {
+                    interpreter.environment.define(param, arg)
                 }
-                std::mem::swap(&mut interpreter.environment, &mut param_env);
-                let ans = interpreter.execute_statement_block(body.clone());
-                std::mem::swap(&mut interpreter.environment, &mut param_env);
+                let ans = interpreter.execute_block(body);
+                interpreter.environment.pop_env();
                 match ans {
-                    Ok(()) => Ok(shared(Value::Nil)),
+                    Ok(()) => Ok(Value::Nil),
                     Err(RuntimeError {
                         value: RuntimeErrorKind::Returning(v),
                         ..

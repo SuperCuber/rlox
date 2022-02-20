@@ -1,11 +1,11 @@
-use std::time::UNIX_EPOCH;
+use std::rc::Rc;
 
 use crate::{
     ast::{BinaryOperator, CodeExpression, Expression, Statement, UnaryOperator},
     environment::Environment,
     error::{RuntimeError, RuntimeErrorKind, WithLocation},
     token::Literal,
-    value::{shared, LoxCallable, SharedValue, Type, Value},
+    value::{LoxCallable, Type, Value},
 };
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
@@ -19,11 +19,11 @@ impl Interpreter {
         let mut globals = Environment::new();
         globals.define(
             "clock".into(),
-            shared(Value::Callable(LoxCallable::NativeFunction(
+            Value::Callable(LoxCallable::NativeFunction(
                 "clock".into(),
                 0,
-                Box::new(clock),
-            ))),
+                Rc::new(Box::new(clock)),
+            )),
         );
         Interpreter {
             environment: globals,
@@ -45,7 +45,7 @@ impl Interpreter {
                 Ok(())
             }
             Statement::Var(name, value) => self.execute_statement_var(name, value),
-            Statement::Block(b) => self.execute_statement_block(b),
+            Statement::Block(b) => self.execute_block(b),
             Statement::If(condition, then_branch, else_branch) => {
                 self.execute_if(condition, *then_branch, else_branch)
             }
@@ -63,31 +63,22 @@ impl Interpreter {
         let value = if let Some(e) = value {
             self.evaluate(e)?
         } else {
-            shared(Value::Nil)
+            Value::Nil
         };
         self.environment.define(name, value);
 
         Ok(())
     }
 
-    pub fn execute_statement_block(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
-        // Trickery to momentarily move the environment out
-        let mut dummy_env = Environment::new();
-        std::mem::swap(&mut self.environment, &mut dummy_env);
-        self.environment = Environment::new_inside(dummy_env);
-
-        let res = self.execute_block(statements);
-
-        let mut dummy_env = Environment::new();
-        std::mem::swap(&mut self.environment, &mut dummy_env);
-        self.environment = dummy_env.pop().unwrap();
-        res
-    }
-
-    fn execute_block(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
+    pub fn execute_block(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
+        self.environment.push_env();
         for statement in statements {
-            self.execute(statement)?;
+            if let Err(e) = self.execute(statement) {
+                self.environment.pop_env();
+                return Err(e);
+            }
         }
+        self.environment.pop_env();
         Ok(())
     }
 
@@ -99,7 +90,7 @@ impl Interpreter {
     ) -> RuntimeResult<()> {
         let location = condition.location;
         let condition = self.evaluate(condition)?;
-        if condition.as_boolean().with_location(location)? {
+        if condition.into_boolean().with_location(location)? {
             self.execute(then_branch)?;
         } else if let Some(else_branch) = else_branch {
             self.execute(*else_branch)?;
@@ -110,7 +101,7 @@ impl Interpreter {
     fn execute_while(&mut self, condition: CodeExpression, body: Statement) -> RuntimeResult<()> {
         while self
             .evaluate(condition.clone())?
-            .as_boolean()
+            .into_boolean()
             .with_location(condition.location)?
         {
             self.execute(body.clone())?;
@@ -124,12 +115,11 @@ impl Interpreter {
         params: Vec<String>,
         body: Vec<Statement>,
     ) -> RuntimeResult<()> {
-        let function = shared(Value::Callable(LoxCallable::LoxFunction {
+        let function = Value::Callable(LoxCallable::LoxFunction {
             name: name.clone(),
             params,
             body,
-            closure: self.environment.clone(),
-        }));
+        });
         self.environment.define(name, function);
         Ok(())
     }
@@ -138,17 +128,17 @@ impl Interpreter {
         let value = expression
             .map(|e| self.evaluate(e))
             .transpose()?
-            .unwrap_or_else(|| shared(Value::Nil));
+            .unwrap_or(Value::Nil);
         Err(RuntimeError {
             location: (0, 0),
             value: RuntimeErrorKind::Returning(value),
         })
     }
 
-    pub fn evaluate(&mut self, expression: CodeExpression) -> RuntimeResult<SharedValue> {
+    pub fn evaluate(&mut self, expression: CodeExpression) -> RuntimeResult<Value> {
         let loc = expression.location;
         match expression.value {
-            Expression::Literal(l) => Ok(shared(self.evaluate_literal(l))),
+            Expression::Literal(l) => Ok(self.evaluate_literal(l)),
             Expression::Assign(v, e) => self.evaluate_assign(loc, v, *e),
             Expression::Grouping(e) => self.evaluate(*e),
             Expression::Unary(o, r) => self.evaluate_unary(loc, o, *r),
@@ -163,7 +153,7 @@ impl Interpreter {
         location: (usize, usize),
         variable: String,
         expression: CodeExpression,
-    ) -> RuntimeResult<SharedValue> {
+    ) -> RuntimeResult<Value> {
         let value = self.evaluate(expression)?;
         self.environment
             .assign(variable, value.clone())
@@ -185,16 +175,12 @@ impl Interpreter {
         location: (usize, usize),
         o: UnaryOperator,
         r: CodeExpression,
-    ) -> RuntimeResult<SharedValue> {
+    ) -> RuntimeResult<Value> {
         let right = self.evaluate(r)?;
 
         Ok(match o {
-            UnaryOperator::Minus => {
-                shared(Value::Number(-right.as_number().with_location(location)?))
-            }
-            UnaryOperator::Not => {
-                shared(Value::Boolean(!right.as_boolean().with_location(location)?))
-            }
+            UnaryOperator::Minus => Value::Number(-right.into_number().with_location(location)?),
+            UnaryOperator::Not => Value::Boolean(!right.into_boolean().with_location(location)?),
         })
     }
 
@@ -204,7 +190,7 @@ impl Interpreter {
         left: CodeExpression,
         operator: BinaryOperator,
         right: CodeExpression,
-    ) -> RuntimeResult<SharedValue> {
+    ) -> RuntimeResult<Value> {
         let left = self.evaluate(left)?;
         let right = self.evaluate(right)?;
 
@@ -212,25 +198,31 @@ impl Interpreter {
         let res: Result<Value, RuntimeErrorKind> = (|| {
             let res = match operator {
                 // Math
-                BinaryOperator::Subtract => Value::Number(left.as_number()? - right.as_number()?),
-                BinaryOperator::Divide => Value::Number(left.as_number()? / right.as_number()?),
-                BinaryOperator::Multiply => Value::Number(left.as_number()? * right.as_number()?),
-                // Comparison
-                BinaryOperator::Less => Value::Boolean(left.as_number()? < right.as_number()?),
-                BinaryOperator::LessEquals => {
-                    Value::Boolean(left.as_number()? <= right.as_number()?)
+                BinaryOperator::Subtract => {
+                    Value::Number(left.into_number()? - right.into_number()?)
                 }
-                BinaryOperator::Greater => Value::Boolean(left.as_number()? > right.as_number()?),
+                BinaryOperator::Divide => Value::Number(left.into_number()? / right.into_number()?),
+                BinaryOperator::Multiply => {
+                    Value::Number(left.into_number()? * right.into_number()?)
+                }
+                // Comparison
+                BinaryOperator::Less => Value::Boolean(left.into_number()? < right.into_number()?),
+                BinaryOperator::LessEquals => {
+                    Value::Boolean(left.into_number()? <= right.into_number()?)
+                }
+                BinaryOperator::Greater => {
+                    Value::Boolean(left.into_number()? > right.into_number()?)
+                }
                 BinaryOperator::GreaterEquals => {
-                    Value::Boolean(left.as_number()? >= right.as_number()?)
+                    Value::Boolean(left.into_number()? >= right.into_number()?)
                 }
                 // Equality
-                BinaryOperator::Equals => Value::Boolean(left.eq(&right)),
-                BinaryOperator::NotEquals => Value::Boolean(!left.eq(&right)),
+                BinaryOperator::Equals => Value::Boolean(left == right),
+                BinaryOperator::NotEquals => Value::Boolean(left != right),
                 // Logical - short circuiting
                 BinaryOperator::And => {
-                    let left = left.as_boolean()?;
-                    let right = right.as_boolean()?;
+                    let left = left.into_boolean()?;
+                    let right = right.into_boolean()?;
                     if !left {
                         Value::Boolean(false)
                     } else {
@@ -238,8 +230,8 @@ impl Interpreter {
                     }
                 }
                 BinaryOperator::Or => {
-                    let left = left.as_boolean()?;
-                    let right = right.as_boolean()?;
+                    let left = left.into_boolean()?;
+                    let right = right.into_boolean()?;
                     if left {
                         Value::Boolean(true)
                     } else {
@@ -248,12 +240,12 @@ impl Interpreter {
                 }
                 // Add
                 BinaryOperator::Add => {
-                    if let Ok(left) = left.as_number() {
-                        let right = right.as_number()?;
+                    if let Ok(left) = left.clone().into_number() {
+                        let right = right.into_number()?;
                         Value::Number(left + right)
-                    } else if let Ok(left) = left.as_string() {
-                        let right = right.as_string()?;
-                        Value::String(left.to_string() + right)
+                    } else if let Ok(left) = left.clone().into_string() {
+                        let right = right.into_string()?;
+                        Value::String(left + &right)
                     } else {
                         return Err(RuntimeErrorKind::TypeErrorMultiple(
                             vec![Type::Number, Type::String],
@@ -264,7 +256,7 @@ impl Interpreter {
             };
             Ok(res)
         })();
-        res.map(shared).with_location(location)
+        res.with_location(location)
     }
 
     fn evaluate_call(
@@ -272,10 +264,11 @@ impl Interpreter {
         location: (usize, usize),
         callee: CodeExpression,
         args_expressions: Vec<CodeExpression>,
-    ) -> RuntimeResult<SharedValue> {
-        let callee = self.evaluate(callee)?;
-        let callee = callee;
-        let callee = callee.as_callable().with_location(location)?;
+    ) -> RuntimeResult<Value> {
+        let callee = self
+            .evaluate(callee)?
+            .into_callable()
+            .with_location(location)?;
 
         let mut args = Vec::new();
         for arg in args_expressions {
@@ -293,11 +286,6 @@ impl Interpreter {
     }
 }
 
-fn clock(_interpreter: &mut Interpreter, _args: Vec<SharedValue>) -> RuntimeResult<SharedValue> {
-    Ok(shared(Value::Number(
-        std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs_f32(),
-    )))
+fn clock(_interpreter: &mut Interpreter, _args: Vec<Value>) -> RuntimeResult<Value> {
+    todo!()
 }
