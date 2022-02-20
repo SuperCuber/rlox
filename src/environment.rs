@@ -1,31 +1,33 @@
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::{
+    cell::RefCell,
+    collections::{btree_map::Entry, BTreeMap},
+    rc::Rc,
+};
 
 use crate::{error::RuntimeErrorKind, value::Value};
 
 pub struct Environment {
-    enclosing: Option<Box<Environment>>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
     values: BTreeMap<String, Value>,
 }
 
 impl Environment {
-    pub fn new() -> Environment {
-        Environment {
+    pub fn new() -> Rc<RefCell<Environment>> {
+        Rc::new(RefCell::new(Environment {
             values: BTreeMap::new(),
             enclosing: None,
-        }
+        }))
     }
 
-    pub fn push_env(&mut self) {
-        let mut enclosing = Environment::new();
-        std::mem::swap(self, &mut enclosing);
-        // Old environment is in `enclosing`, new environment is self
-        self.enclosing = Some(Box::new(enclosing));
+    pub fn new_inside(enclosing: Rc<RefCell<Environment>>) -> Rc<RefCell<Environment>> {
+        Rc::new(RefCell::new(Environment {
+            values: BTreeMap::new(),
+            enclosing: Some(enclosing),
+        }))
     }
 
-    pub fn pop_env(&mut self) {
-        let mut enclosing = self.enclosing.take().unwrap();
-        std::mem::swap(self, &mut enclosing);
-        // Enclosing now is self, self in the enclosing variable and will be dropped
+    pub fn pop(&self) -> Option<Rc<RefCell<Environment>>> {
+        self.enclosing.clone()
     }
 
     pub fn define(&mut self, name: String, value: Value) {
@@ -36,7 +38,7 @@ impl Environment {
         match self.values.get(&name) {
             Some(v) => Ok(v.clone()),
             None => match &self.enclosing {
-                Some(e) => e.get(name),
+                Some(e) => e.borrow().get(name),
                 None => Err(RuntimeErrorKind::UndefinedVariable(name)),
             },
         }
@@ -49,7 +51,7 @@ impl Environment {
                 Ok(())
             }
             Entry::Vacant(_) => match &mut self.enclosing {
-                Some(enc) => enc.assign(name, value),
+                Some(enc) => enc.borrow_mut().assign(name, value),
                 None => Err(RuntimeErrorKind::UndefinedVariable(name)),
             },
         }

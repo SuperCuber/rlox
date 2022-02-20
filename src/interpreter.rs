@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::{BinaryOperator, CodeExpression, Expression, Statement, UnaryOperator},
@@ -11,13 +11,13 @@ use crate::{
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
 pub struct Interpreter {
-    pub environment: Environment,
+    pub environment: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        let mut globals = Environment::new();
-        globals.define(
+        let globals = Environment::new();
+        globals.borrow_mut().define(
             "clock".into(),
             Value::Callable(LoxCallable::NativeFunction(
                 "clock".into(),
@@ -45,7 +45,7 @@ impl Interpreter {
                 Ok(())
             }
             Statement::Var(name, value) => self.execute_statement_var(name, value),
-            Statement::Block(b) => self.execute_block(b),
+            Statement::Block(b) => self.execute_block_statement(b),
             Statement::If(condition, then_branch, else_branch) => {
                 self.execute_if(condition, *then_branch, else_branch)
             }
@@ -65,20 +65,24 @@ impl Interpreter {
         } else {
             Value::Nil
         };
-        self.environment.define(name, value);
+        self.environment.borrow_mut().define(name, value);
 
         Ok(())
     }
 
-    pub fn execute_block(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
-        self.environment.push_env();
+    pub fn execute_block_statement(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
+        self.environment = Environment::new_inside(self.environment.clone());
+
+        let res = self.execute_block(statements);
+
+        self.environment = self.environment.clone().borrow().pop().unwrap();
+        res
+    }
+
+    fn execute_block(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
         for statement in statements {
-            if let Err(e) = self.execute(statement) {
-                self.environment.pop_env();
-                return Err(e);
-            }
+            self.execute(statement)?;
         }
-        self.environment.pop_env();
         Ok(())
     }
 
@@ -119,8 +123,9 @@ impl Interpreter {
             name: name.clone(),
             params,
             body,
+            closure: self.environment.clone(),
         });
-        self.environment.define(name, function);
+        self.environment.borrow_mut().define(name, function);
         Ok(())
     }
 
@@ -143,7 +148,7 @@ impl Interpreter {
             Expression::Grouping(e) => self.evaluate(*e),
             Expression::Unary(o, r) => self.evaluate_unary(loc, o, *r),
             Expression::Binary(l, o, r) => self.evaluate_binary(loc, *l, o, *r),
-            Expression::Variable(v) => self.environment.get(v).with_location(loc),
+            Expression::Variable(v) => self.environment.borrow().get(v).with_location(loc),
             Expression::Call(c, a) => self.evaluate_call(loc, *c, a),
         }
     }
@@ -156,6 +161,7 @@ impl Interpreter {
     ) -> RuntimeResult<Value> {
         let value = self.evaluate(expression)?;
         self.environment
+            .borrow_mut()
             .assign(variable, value.clone())
             .with_location(location)?;
         Ok(value)

@@ -1,7 +1,8 @@
-use std::{fmt::Debug, fmt::Display, rc::Rc};
+use std::{cell::RefCell, fmt::Debug, fmt::Display, rc::Rc};
 
 use crate::{
     ast::Statement,
+    environment::Environment,
     error::{RuntimeError, RuntimeErrorKind},
     interpreter::{Interpreter, RuntimeResult},
 };
@@ -109,6 +110,7 @@ pub enum LoxCallable {
         name: String,
         params: Vec<String>,
         body: Vec<Statement>,
+        closure: Rc<RefCell<Environment>>,
     },
     NativeFunction(String, usize, Function),
 }
@@ -116,11 +118,11 @@ pub enum LoxCallable {
 impl Debug for LoxCallable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::LoxFunction { name, params, body } => f
+            Self::LoxFunction { name, params, .. } => f
                 .debug_struct("LoxFunction")
                 .field("name", name)
                 .field("params", params)
-                .field("body", body)
+                // .field("body", body)
                 .finish(),
             Self::NativeFunction(arg0, arg1, _) => f
                 .debug_tuple("NativeFunction")
@@ -150,13 +152,18 @@ impl PartialEq for LoxCallable {
 impl LoxCallable {
     pub fn call(self, interpreter: &mut Interpreter, args: Vec<Value>) -> RuntimeResult<Value> {
         match self {
-            LoxCallable::LoxFunction { params, body, .. } => {
-                interpreter.environment.push_env();
+            LoxCallable::LoxFunction {
+                params,
+                body,
+                closure,
+                ..
+            } => {
+                interpreter.environment = Environment::new_inside(closure);
                 for (param, arg) in params.into_iter().zip(args.into_iter()) {
-                    interpreter.environment.define(param, arg)
+                    interpreter.environment.borrow_mut().define(param, arg)
                 }
-                let ans = interpreter.execute_block(body);
-                interpreter.environment.pop_env();
+                let ans = interpreter.execute_block_statement(body);
+                interpreter.environment = interpreter.environment.clone().borrow().pop().unwrap();
                 match ans {
                     Ok(()) => Ok(Value::Nil),
                     Err(RuntimeError {
