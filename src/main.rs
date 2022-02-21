@@ -12,6 +12,7 @@ mod environment;
 mod error;
 mod interpreter;
 mod parser;
+mod resolver;
 mod scanner;
 mod token;
 mod value;
@@ -79,6 +80,10 @@ fn run(
             .parse_expression()
             .map_err(|e| e.into_iter().map(Into::into).collect::<Vec<LoxError>>());
         if let Ok(expr) = expr {
+            let mut resolver = resolver::Resolver::new();
+            let expr = resolver
+                .resolve_expr(expr)
+                .map_err(|e| e.into_iter().map(Into::into).collect::<Vec<LoxError>>())?;
             let value = interpreter.evaluate(expr).map_err(|e| vec![e.into()])?;
             println!("{}", value);
             return Ok(());
@@ -89,6 +94,10 @@ fn run(
     let parser = parser::Parser::new(tokens);
     let ast = parser
         .parse()
+        .map_err(|e| e.into_iter().map(Into::into).collect::<Vec<LoxError>>())?;
+    let mut resolver = resolver::Resolver::new();
+    let ast = resolver
+        .resolve(ast)
         .map_err(|e| e.into_iter().map(Into::into).collect::<Vec<LoxError>>())?;
 
     interpreter.interpret(ast).map_err(|e| vec![e.into()])?;

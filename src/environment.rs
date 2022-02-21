@@ -1,10 +1,6 @@
-use std::{
-    cell::RefCell,
-    collections::{btree_map::Entry, BTreeMap},
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
-use crate::{error::RuntimeErrorKind, value::Value};
+use crate::{ast::ResolvedVariable, error::RuntimeErrorKind, value::Value};
 
 pub struct Environment {
     enclosing: Option<Rc<RefCell<Environment>>>,
@@ -34,26 +30,60 @@ impl Environment {
         self.values.insert(name, value);
     }
 
-    pub fn get(&self, name: String) -> Result<Value, RuntimeErrorKind> {
-        match self.values.get(&name) {
-            Some(v) => Ok(v.clone()),
-            None => match &self.enclosing {
-                Some(e) => e.borrow().get(name),
-                None => Err(RuntimeErrorKind::UndefinedVariable(name)),
-            },
+    pub fn get(&self, variable: ResolvedVariable) -> Result<Value, RuntimeErrorKind> {
+        match variable.hops {
+            Some(0) => self.values.get(&variable.name).cloned(),
+            Some(h) => self
+                .enclosing
+                .as_ref()
+                .expect("correctly calculated hops")
+                .borrow()
+                .get(ResolvedVariable {
+                    hops: Some(h - 1),
+                    name: variable.name.clone(),
+                })
+                .ok(),
+            None => {
+                if let Some(e) = &self.enclosing {
+                    e.borrow().get(variable.clone()).ok()
+                } else {
+                    self.values.get(&variable.name).cloned()
+                }
+            }
         }
+        .ok_or(RuntimeErrorKind::UndefinedVariable(variable.name))
     }
 
-    pub fn assign(&mut self, name: String, value: Value) -> Result<(), RuntimeErrorKind> {
-        match self.values.entry(name.clone()) {
-            Entry::Occupied(mut e) => {
-                e.insert(value);
-                Ok(())
+    pub fn assign(
+        &mut self,
+        variable: ResolvedVariable,
+        value: Value,
+    ) -> Result<(), RuntimeErrorKind> {
+        match variable.hops {
+            Some(0) => {
+                self.values.insert(variable.name, value);
             }
-            Entry::Vacant(_) => match &mut self.enclosing {
-                Some(enc) => enc.borrow_mut().assign(name, value),
-                None => Err(RuntimeErrorKind::UndefinedVariable(name)),
-            },
+            Some(h) => {
+                self.enclosing
+                    .as_ref()
+                    .expect("correctly calculated hops")
+                    .borrow_mut()
+                    .assign(
+                        ResolvedVariable {
+                            hops: Some(h - 1),
+                            name: variable.name,
+                        },
+                        value,
+                    )?;
+            }
+            None => {
+                if let Some(e) = &self.enclosing {
+                    e.borrow_mut().assign(variable, value)?;
+                } else {
+                    self.values.insert(variable.name, value);
+                }
+            }
         }
+        Ok(())
     }
 }

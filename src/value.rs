@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Debug, fmt::Display, rc::Rc};
 
 use crate::{
-    ast::Statement,
+    ast::ResolvedStatement,
     environment::Environment,
     error::{RuntimeError, RuntimeErrorKind},
     interpreter::{Interpreter, RuntimeResult},
@@ -109,7 +109,7 @@ pub enum LoxCallable {
     LoxFunction {
         name: String,
         params: Vec<String>,
-        body: Vec<Statement>,
+        body: Vec<ResolvedStatement>,
         closure: Rc<RefCell<Environment>>,
     },
     NativeFunction(String, usize, Function),

@@ -5,18 +5,31 @@ use crate::{
 
 // Expressions
 
-pub type CodeExpression = Located<Expression>;
+pub type GenericCodeExpression<V> = Located<Expression<V>>;
+pub type CodeExpression = Located<Expression<String>>;
+pub type ResolvedCodeExpression = Located<Expression<ResolvedVariable>>;
 
 #[derive(Debug, Clone)]
-pub enum Expression {
-    Binary(Box<CodeExpression>, BinaryOperator, Box<CodeExpression>),
-    Call(Box<CodeExpression>, Vec<CodeExpression>),
-    Grouping(Box<CodeExpression>),
+pub enum Expression<V> {
+    Binary(
+        Box<GenericCodeExpression<V>>,
+        BinaryOperator,
+        Box<GenericCodeExpression<V>>,
+    ),
+    Call(Box<GenericCodeExpression<V>>, Vec<GenericCodeExpression<V>>),
+    Grouping(Box<GenericCodeExpression<V>>),
     Literal(Literal),
-    Unary(UnaryOperator, Box<CodeExpression>),
-    Variable(String),
+    Unary(UnaryOperator, Box<GenericCodeExpression<V>>),
+    Variable(V),
     // TODO: I dont like assignment being an expression. I want it to be a statement.
-    Assign(String, Box<CodeExpression>),
+    Assign(V, Box<GenericCodeExpression<V>>),
+}
+
+#[derive(Clone)]
+pub struct ResolvedVariable {
+    pub name: String,
+    /// none = global
+    pub hops: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,15 +82,22 @@ impl BinaryOperator {
     }
 }
 
+pub type Statement = GenericStatement<String>;
+pub type ResolvedStatement = GenericStatement<ResolvedVariable>;
+
 // Statements
 #[derive(Debug, Clone)]
-pub enum Statement {
-    Expression(CodeExpression),
-    Function(String, Vec<String>, Vec<Statement>),
-    Print(CodeExpression),
-    Return(Option<CodeExpression>),
-    Var(String, Option<CodeExpression>),
-    While(CodeExpression, Box<Statement>),
-    Block(Vec<Statement>),
-    If(CodeExpression, Box<Statement>, Option<Box<Statement>>),
+pub enum GenericStatement<V> {
+    Expression(GenericCodeExpression<V>),
+    Function(String, Vec<String>, Vec<GenericStatement<V>>),
+    Print(GenericCodeExpression<V>),
+    Return(Option<GenericCodeExpression<V>>),
+    Var(String, Option<GenericCodeExpression<V>>),
+    While(GenericCodeExpression<V>, Box<GenericStatement<V>>),
+    Block(Vec<GenericStatement<V>>),
+    If(
+        GenericCodeExpression<V>,
+        Box<GenericStatement<V>>,
+        Option<Box<GenericStatement<V>>>,
+    ),
 }

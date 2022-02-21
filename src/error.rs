@@ -14,6 +14,8 @@ pub enum LoxError {
     #[error("{0}")]
     Parse(#[from] ParseError),
     #[error("{0}")]
+    Resolve(#[from] ResolveError),
+    #[error("{0}")]
     Runtime(#[from] RuntimeError),
 }
 
@@ -24,7 +26,6 @@ pub struct Located<T> {
 }
 
 pub type TokenizeError = Located<TokenizeErrorKind>;
-
 #[derive(Debug, thiserror::Error)]
 pub enum TokenizeErrorKind {
     #[error("unexpected start of token: `{0}`")]
@@ -34,7 +35,6 @@ pub enum TokenizeErrorKind {
 }
 
 pub type ParseError = Located<ParseErrorKind>;
-
 #[derive(Debug, thiserror::Error)]
 pub enum ParseErrorKind {
     #[error("unexpected token {0:?}, expected {1:?}")]
@@ -47,8 +47,18 @@ pub enum ParseErrorKind {
     TooManyArguments(usize),
 }
 
-pub type RuntimeError = Located<RuntimeErrorKind>;
+pub type ResolveError = Located<ResolveErrorKind>;
+#[derive(Debug, thiserror::Error)]
+pub enum ResolveErrorKind {
+    #[error("can't read local variable in its own initializer")]
+    VariableOwnInitializer,
+    #[error("already a variable with this name in this scope")]
+    VariableRedeclaration,
+    #[error("can't return from top-level code")]
+    TopLevelReturn,
+}
 
+pub type RuntimeError = Located<RuntimeErrorKind>;
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeErrorKind {
     #[error("expected type {0:?}, got {1:?}")]

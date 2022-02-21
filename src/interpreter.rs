@@ -1,7 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast::{BinaryOperator, CodeExpression, Expression, Statement, UnaryOperator},
+    ast::{
+        BinaryOperator, Expression, ResolvedCodeExpression, ResolvedStatement, ResolvedVariable,
+        UnaryOperator,
+    },
     environment::Environment,
     error::{RuntimeError, RuntimeErrorKind, WithLocation},
     token::Literal,
@@ -30,35 +33,35 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, program: Vec<Statement>) -> RuntimeResult<()> {
+    pub fn interpret(&mut self, program: Vec<ResolvedStatement>) -> RuntimeResult<()> {
         for statement in program {
             self.execute(statement)?;
         }
         Ok(())
     }
 
-    fn execute(&mut self, statement: Statement) -> RuntimeResult<()> {
+    fn execute(&mut self, statement: ResolvedStatement) -> RuntimeResult<()> {
         match statement {
-            Statement::Expression(expr) => self.evaluate(expr).map(|_| ()),
-            Statement::Print(expr) => {
+            ResolvedStatement::Expression(expr) => self.evaluate(expr).map(|_| ()),
+            ResolvedStatement::Print(expr) => {
                 println!("{}", self.evaluate(expr)?);
                 Ok(())
             }
-            Statement::Var(name, value) => self.execute_statement_var(name, value),
-            Statement::Block(b) => self.execute_block_statement(b),
-            Statement::If(condition, then_branch, else_branch) => {
+            ResolvedStatement::Var(name, value) => self.execute_statement_var(name, value),
+            ResolvedStatement::Block(b) => self.execute_block_statement(b),
+            ResolvedStatement::If(condition, then_branch, else_branch) => {
                 self.execute_if(condition, *then_branch, else_branch)
             }
-            Statement::While(condition, body) => self.execute_while(condition, *body),
-            Statement::Function(name, params, body) => self.execute_fun(name, params, body),
-            Statement::Return(expr) => self.execute_return(expr),
+            ResolvedStatement::While(condition, body) => self.execute_while(condition, *body),
+            ResolvedStatement::Function(name, params, body) => self.execute_fun(name, params, body),
+            ResolvedStatement::Return(expr) => self.execute_return(expr),
         }
     }
 
     fn execute_statement_var(
         &mut self,
         name: String,
-        value: Option<CodeExpression>,
+        value: Option<ResolvedCodeExpression>,
     ) -> Result<(), RuntimeError> {
         let value = if let Some(e) = value {
             self.evaluate(e)?
@@ -70,7 +73,10 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn execute_block_statement(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
+    pub fn execute_block_statement(
+        &mut self,
+        statements: Vec<ResolvedStatement>,
+    ) -> RuntimeResult<()> {
         self.environment = Environment::new_inside(self.environment.clone());
 
         let res = self.execute_block(statements);
@@ -79,7 +85,7 @@ impl Interpreter {
         res
     }
 
-    fn execute_block(&mut self, statements: Vec<Statement>) -> RuntimeResult<()> {
+    fn execute_block(&mut self, statements: Vec<ResolvedStatement>) -> RuntimeResult<()> {
         for statement in statements {
             self.execute(statement)?;
         }
@@ -88,9 +94,9 @@ impl Interpreter {
 
     fn execute_if(
         &mut self,
-        condition: CodeExpression,
-        then_branch: Statement,
-        else_branch: Option<Box<Statement>>,
+        condition: ResolvedCodeExpression,
+        then_branch: ResolvedStatement,
+        else_branch: Option<Box<ResolvedStatement>>,
     ) -> RuntimeResult<()> {
         let location = condition.location;
         let condition = self.evaluate(condition)?;
@@ -102,7 +108,11 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_while(&mut self, condition: CodeExpression, body: Statement) -> RuntimeResult<()> {
+    fn execute_while(
+        &mut self,
+        condition: ResolvedCodeExpression,
+        body: ResolvedStatement,
+    ) -> RuntimeResult<()> {
         while self
             .evaluate(condition.clone())?
             .into_boolean()
@@ -117,7 +127,7 @@ impl Interpreter {
         &mut self,
         name: String,
         params: Vec<String>,
-        body: Vec<Statement>,
+        body: Vec<ResolvedStatement>,
     ) -> RuntimeResult<()> {
         let function = Value::Callable(LoxCallable::LoxFunction {
             name: name.clone(),
@@ -129,7 +139,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_return(&mut self, expression: Option<CodeExpression>) -> RuntimeResult<()> {
+    fn execute_return(&mut self, expression: Option<ResolvedCodeExpression>) -> RuntimeResult<()> {
         let value = expression
             .map(|e| self.evaluate(e))
             .transpose()?
@@ -140,7 +150,7 @@ impl Interpreter {
         })
     }
 
-    pub fn evaluate(&mut self, expression: CodeExpression) -> RuntimeResult<Value> {
+    pub fn evaluate(&mut self, expression: ResolvedCodeExpression) -> RuntimeResult<Value> {
         let loc = expression.location;
         match expression.value {
             Expression::Literal(l) => Ok(self.evaluate_literal(l)),
@@ -156,8 +166,8 @@ impl Interpreter {
     fn evaluate_assign(
         &mut self,
         location: (usize, usize),
-        variable: String,
-        expression: CodeExpression,
+        variable: ResolvedVariable,
+        expression: ResolvedCodeExpression,
     ) -> RuntimeResult<Value> {
         let value = self.evaluate(expression)?;
         self.environment
@@ -180,7 +190,7 @@ impl Interpreter {
         &mut self,
         location: (usize, usize),
         o: UnaryOperator,
-        r: CodeExpression,
+        r: ResolvedCodeExpression,
     ) -> RuntimeResult<Value> {
         let right = self.evaluate(r)?;
 
@@ -193,9 +203,9 @@ impl Interpreter {
     fn evaluate_binary(
         &mut self,
         location: (usize, usize),
-        left: CodeExpression,
+        left: ResolvedCodeExpression,
         operator: BinaryOperator,
-        right: CodeExpression,
+        right: ResolvedCodeExpression,
     ) -> RuntimeResult<Value> {
         let left = self.evaluate(left)?;
         let right = self.evaluate(right)?;
@@ -268,8 +278,8 @@ impl Interpreter {
     fn evaluate_call(
         &mut self,
         location: (usize, usize),
-        callee: CodeExpression,
-        args_expressions: Vec<CodeExpression>,
+        callee: ResolvedCodeExpression,
+        args_expressions: Vec<ResolvedCodeExpression>,
     ) -> RuntimeResult<Value> {
         let callee = self
             .evaluate(callee)?
