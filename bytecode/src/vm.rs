@@ -1,5 +1,6 @@
 use crate::{
     chunk::{Chunk, OpCode},
+    compiler::compile,
     value::Value,
 };
 
@@ -21,17 +22,13 @@ macro_rules! binary_op {
 }
 
 impl VM {
-    pub fn new(chunk: Chunk) -> Self {
-        Self {
-            chunk,
+    pub fn new(source: String) -> Result<Self, ()> {
+        Ok(Self {
+            chunk: compile(source)?,
             ip: 0,
             stack: [Value::default(); STACK_MAX],
             stack_top: 0,
-        }
-    }
-
-    pub fn interpret(&mut self) -> Result<(), VMError> {
-        self.run()
+        })
     }
 
     pub fn run(&mut self) -> Result<(), VMError> {
