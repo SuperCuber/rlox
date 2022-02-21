@@ -25,7 +25,7 @@ pub enum Expression<V> {
     Assign(V, Box<GenericCodeExpression<V>>),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ResolvedVariable {
     pub name: String,
     /// none = global

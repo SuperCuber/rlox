@@ -19,10 +19,16 @@ pub enum LoxError {
     Runtime(#[from] RuntimeError),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Located<T> {
     pub location: (usize, usize),
     pub value: T,
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Located<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.value.fmt(f)
+    }
 }
 
 pub type TokenizeError = Located<TokenizeErrorKind>;

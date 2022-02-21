@@ -1,4 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::{
     ast::{
@@ -303,5 +307,10 @@ impl Interpreter {
 }
 
 fn clock(_interpreter: &mut Interpreter, _args: Vec<Value>) -> RuntimeResult<Value> {
-    todo!()
+    Ok(Value::Number(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f32(),
+    ))
 }

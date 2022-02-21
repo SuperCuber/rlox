@@ -2,6 +2,7 @@ use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 use crate::{ast::ResolvedVariable, error::RuntimeErrorKind, value::Value};
 
+#[derive(Debug)]
 pub struct Environment {
     enclosing: Option<Rc<RefCell<Environment>>>,
     values: BTreeMap<String, Value>,

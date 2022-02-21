@@ -158,12 +158,13 @@ impl LoxCallable {
                 closure,
                 ..
             } => {
-                interpreter.environment = Environment::new_inside(closure);
+                let mut old_env = Environment::new_inside(closure);
+                std::mem::swap(&mut old_env, &mut interpreter.environment);
                 for (param, arg) in params.into_iter().zip(args.into_iter()) {
                     interpreter.environment.borrow_mut().define(param, arg)
                 }
                 let ans = interpreter.execute_block_statement(body);
-                interpreter.environment = interpreter.environment.clone().borrow().pop().unwrap();
+                std::mem::swap(&mut old_env, &mut interpreter.environment);
                 match ans {
                     Ok(()) => Ok(Value::Nil),
                     Err(RuntimeError {
