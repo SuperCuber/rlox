@@ -3,6 +3,7 @@ use crate::{
     compiler::compile,
     value::Value,
 };
+use encode_instruction::EncodeInstruction;
 
 const STACK_MAX: usize = 256;
 
@@ -44,8 +45,8 @@ impl VM {
             }
 
             match self.read_instruction().expect("next instruction") {
-                OpCode::Constant => {
-                    let constant = self.read_constant();
+                OpCode::Constant(addr) => {
+                    let constant = self.chunk.constants[addr as usize];
                     self.stack_push(constant);
                 }
                 OpCode::Add => binary_op!(self, +),
@@ -66,19 +67,10 @@ impl VM {
 
     // Chunk util
 
-    fn read_constant(&mut self) -> Value {
-        let idx = self.read_byte() as usize;
-        self.chunk.constants[idx]
-    }
-
     fn read_instruction(&mut self) -> Option<OpCode> {
-        OpCode::from_u8(self.read_byte())
-    }
-
-    fn read_byte(&mut self) -> u8 {
-        let res = self.chunk.code[self.ip];
-        self.ip += 1;
-        res
+        let (ans, len) = OpCode::decode(&self.chunk.code[self.ip..])?;
+        self.ip += len;
+        Some(ans)
     }
 
     // Stack util

@@ -6,6 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+encode_instruction = { path = "../encode_instruction" }
+encode_instruction_derive = { path = "../encode_instruction/encode_instruction_derive" }
 
 [features]
 tracing = []
