@@ -1,7 +1,5 @@
 use std::io::{stdin, BufRead, Write};
 
-use chunk::{Chunk, OpCode};
-
 use crate::vm::VM;
 
 mod chunk;
@@ -11,14 +9,15 @@ mod value;
 mod vm;
 
 fn main() {
-    // let mut chunk = Chunk::new();
+    // let mut chunk = chunk::Chunk::new();
     // let const1 = chunk.add_constant(3.0);
     // let const2 = chunk.add_constant(5.0);
-    // chunk.write_code(OpCode::Constant(const1), 2);
-    // chunk.write_code(OpCode::Constant(const2), 2);
-    // chunk.write_code(OpCode::Add, 3);
-    // chunk.write_code(OpCode::Return, 5);
+    // chunk.write_code(chunk::OpCode::LargeConstant(const1), 2);
+    // chunk.write_code(chunk::OpCode::LargeConstant(const2), 2);
+    // chunk.write_code(chunk::OpCode::Add, 3);
+    // chunk.write_code(chunk::OpCode::Return, 5);
     // chunk.disassemble("testerino");
+
     let args: Vec<_> = std::env::args().skip(1).collect();
     match args.as_slice() {
         [] => repl(),

@@ -49,6 +49,10 @@ impl VM {
                     let constant = self.chunk.constants[addr as usize];
                     self.stack_push(constant);
                 }
+                OpCode::LargeConstant(addr) => {
+                    let constant = self.chunk.constants[addr];
+                    self.stack_push(constant);
+                }
                 OpCode::Add => binary_op!(self, +),
                 OpCode::Subtract => binary_op!(self, -),
                 OpCode::Multiply => binary_op!(self, *),

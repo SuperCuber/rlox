@@ -30,9 +30,9 @@ impl Chunk {
     }
 
     /// Returns the index of the new constant
-    pub fn add_constant(&mut self, constant: Value) -> u8 {
+    pub fn add_constant(&mut self, constant: Value) -> usize {
         self.constants.push(constant);
-        (self.constants.len() - 1) as u8
+        self.constants.len() - 1
     }
 
     #[allow(dead_code)]
@@ -58,6 +58,12 @@ impl Chunk {
                     println!(
                         "{:-16} {} '{:?}'",
                         "CONSTANT", constant, self.constants[constant as usize]
+                    );
+                }
+                OpCode::LargeConstant(constant) => {
+                    println!(
+                        "{:-16} {} '{:?}'",
+                        "L_CONSTANT", constant, self.constants[constant as usize]
                     );
                 }
                 OpCode::Add => {
@@ -105,6 +111,7 @@ impl Chunk {
 #[derive(Debug, Clone, Copy, encode_instruction_derive::EncodeInstruction)]
 pub enum OpCode {
     Constant(u8),
+    LargeConstant(usize),
     Add,
     Subtract,
     Multiply,
