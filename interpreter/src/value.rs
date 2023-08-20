@@ -10,7 +10,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     String(String),
-    Number(f32),
+    Number(f64),
     Boolean(bool),
     Callable(LoxCallable),
     Nil,
@@ -34,7 +34,7 @@ impl Value {
         }
     }
 
-    pub fn into_number(self) -> Result<f32, RuntimeErrorKind> {
+    pub fn into_number(self) -> Result<f64, RuntimeErrorKind> {
         match self {
             Value::Number(s) => Ok(s),
             v => Err(RuntimeErrorKind::TypeError(Type::Number, v.value_type())),

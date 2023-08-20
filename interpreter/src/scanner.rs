@@ -106,7 +106,7 @@ impl Scanner {
             '/' => {
                 if self.matches('/') {
                     // Comment - go till the end of the line
-                    while self.peek() != Some('\n') && self.peek() != None {
+                    while self.peek() != Some('\n') && self.peek().is_some() {
                         self.advance();
                     }
                     return Ok(None);
@@ -182,7 +182,7 @@ impl Scanner {
     // Token helpers
 
     fn string(&mut self) -> TokenizeResult<String> {
-        while self.peek() != Some('"') && self.peek() != None {
+        while self.peek() != Some('"') && self.peek().is_some() {
             if self.peek().unwrap() == '\n' {
                 self.line += 1;
             }
@@ -209,7 +209,7 @@ impl Scanner {
         }
     }
 
-    fn number(&mut self) -> f32 {
+    fn number(&mut self) -> f64 {
         while self.peek().map(|c| c.is_ascii_digit()).unwrap_or(false) {
             self.advance();
         }

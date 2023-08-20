@@ -16,7 +16,7 @@ pub enum Token {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     String(String),
-    Number(f32),
+    Number(f64),
     Boolean(bool),
     Nil,
 }

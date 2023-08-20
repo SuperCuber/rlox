@@ -319,7 +319,7 @@ fn clock(_interpreter: &mut Interpreter, _args: Vec<Value>) -> Result<Value, Run
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs_f32(),
+            .as_secs_f64(),
     ))
 }
 
