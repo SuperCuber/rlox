@@ -27,7 +27,6 @@ impl Scanner {
         if self.source.is_empty() {
             return Ok(vec![CodeToken {
                 location: (0, 0),
-                lexeme: "".into(),
                 token: Token::Eof,
             }]);
         }
@@ -40,12 +39,6 @@ impl Scanner {
             self.lexeme_len = 0;
 
             let token = self.scan_token();
-            let lexeme = self
-                .source
-                .chars()
-                .skip(self.lexeme_start)
-                .take(self.lexeme_len)
-                .collect();
             match token {
                 Ok(token) => {
                     // Sometimes scan_token returns without giving us a token
@@ -53,7 +46,6 @@ impl Scanner {
                         tokens.push(CodeToken {
                             token,
                             location: self.location(),
-                            lexeme,
                         });
                     }
                 }
@@ -66,7 +58,6 @@ impl Scanner {
         tokens.push(CodeToken {
             token: Token::Eof,
             location: self.location(),
-            lexeme: "".into(),
         });
 
         if errors.is_empty() {

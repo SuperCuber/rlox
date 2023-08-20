@@ -25,6 +25,14 @@ impl Interpreter {
     pub fn new() -> Interpreter {
         let globals = Environment::new();
         globals.borrow_mut().define(
+            "debug".into(),
+            Value::Callable(LoxCallable::NativeFunction(
+                "debug".into(),
+                1,
+                Rc::new(Box::new(debug)),
+            )),
+        );
+        globals.borrow_mut().define(
             "clock".into(),
             Value::Callable(LoxCallable::NativeFunction(
                 "clock".into(),
@@ -302,15 +310,23 @@ impl Interpreter {
             });
         }
 
-        callee.call(self, args)
+        callee.call(self, args, location)
     }
 }
 
-fn clock(_interpreter: &mut Interpreter, _args: Vec<Value>) -> RuntimeResult<Value> {
+fn clock(_interpreter: &mut Interpreter, _args: Vec<Value>) -> Result<Value, RuntimeErrorKind> {
     Ok(Value::Number(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs_f32(),
     ))
+}
+
+fn debug(_interpreter: &mut Interpreter, args: Vec<Value>) -> Result<Value, RuntimeErrorKind> {
+    let &[value] = &args.as_slice() else {
+        return Err(RuntimeErrorKind::WrongArgsNum(args.len(), 1));
+    };
+
+    Ok(Value::String(format!("{:?}", value)))
 }

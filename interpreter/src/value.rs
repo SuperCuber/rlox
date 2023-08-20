@@ -3,7 +3,7 @@ use std::{cell::RefCell, fmt::Debug, fmt::Display, rc::Rc};
 use crate::{
     ast::ResolvedStatement,
     environment::Environment,
-    error::{RuntimeError, RuntimeErrorKind},
+    error::{RuntimeError, RuntimeErrorKind, WithLocation},
     interpreter::{Interpreter, RuntimeResult},
 };
 
@@ -29,6 +29,7 @@ impl Value {
     pub fn into_string(self) -> Result<String, RuntimeErrorKind> {
         match self {
             Value::String(s) => Ok(s),
+            Value::Number(n) => Ok(n.to_string()),
             v => Err(RuntimeErrorKind::TypeError(Type::String, v.value_type())),
         }
     }
@@ -102,7 +103,7 @@ impl Display for Value {
     }
 }
 
-type Function = Rc<Box<dyn Fn(&mut Interpreter, Vec<Value>) -> RuntimeResult<Value>>>;
+type Function = Rc<Box<dyn Fn(&mut Interpreter, Vec<Value>) -> Result<Value, RuntimeErrorKind>>>;
 
 #[derive(Clone)]
 pub enum LoxCallable {
@@ -150,7 +151,7 @@ impl PartialEq for LoxCallable {
 }
 
 impl LoxCallable {
-    pub fn call(self, interpreter: &mut Interpreter, args: Vec<Value>) -> RuntimeResult<Value> {
+    pub fn call(self, interpreter: &mut Interpreter, args: Vec<Value>, call_location: (usize, usize)) -> RuntimeResult<Value> {
         match self {
             LoxCallable::LoxFunction {
                 params,
@@ -174,7 +175,9 @@ impl LoxCallable {
                     Err(e) => Err(e),
                 }
             }
-            LoxCallable::NativeFunction(_, _, fun) => fun(interpreter, args),
+            LoxCallable::NativeFunction(_, _, fun) => {
+                fun(interpreter, args).with_location(call_location)
+            }
         }
     }
 

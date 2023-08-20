@@ -2,7 +2,6 @@
 pub struct CodeToken {
     pub token: Token,
     pub location: (usize, usize),
-    pub lexeme: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
