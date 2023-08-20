@@ -29,7 +29,6 @@ impl Value {
     pub fn into_string(self) -> Result<String, RuntimeErrorKind> {
         match self {
             Value::String(s) => Ok(s),
-            Value::Number(n) => Ok(n.to_string()),
             v => Err(RuntimeErrorKind::TypeError(Type::String, v.value_type())),
         }
     }
