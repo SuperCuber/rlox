@@ -267,20 +267,28 @@ impl Interpreter {
                     }
                 }
                 // Add
-                BinaryOperator::Add => {
-                    if let Ok(left) = left.clone().into_number() {
-                        let right = right.into_number()?;
-                        Value::Number(left + right)
-                    } else if let Ok(left) = left.clone().into_string() {
-                        let right = right.into_string()?;
-                        Value::String(left + &right)
-                    } else {
+                BinaryOperator::Add => match (&left, &right) {
+                    (Value::Number(l), Value::Number(r)) => Value::Number(l + r),
+                    (Value::String(l), Value::Number(r)) => {
+                        Value::String(l.to_string() + &r.to_string())
+                    }
+                    (Value::Number(l), Value::String(r)) => Value::String(l.to_string() + &r),
+                    (Value::String(l), Value::String(r)) => Value::String(l.to_string() + &r),
+                    (Value::Number(_) | Value::String(_), _) => {
+                        // Left is fine, right must be wrong
+                        return Err(RuntimeErrorKind::TypeErrorMultiple(
+                            vec![Type::Number, Type::String],
+                            right.value_type(),
+                        ));
+                    }
+                    _ => {
+                        // Left must be wrong
                         return Err(RuntimeErrorKind::TypeErrorMultiple(
                             vec![Type::Number, Type::String],
                             left.value_type(),
                         ));
                     }
-                }
+                },
             };
             Ok(res)
         })();

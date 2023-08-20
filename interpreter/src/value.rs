@@ -26,13 +26,6 @@ pub enum Type {
 }
 
 impl Value {
-    pub fn into_string(self) -> Result<String, RuntimeErrorKind> {
-        match self {
-            Value::String(s) => Ok(s),
-            v => Err(RuntimeErrorKind::TypeError(Type::String, v.value_type())),
-        }
-    }
-
     pub fn into_number(self) -> Result<f64, RuntimeErrorKind> {
         match self {
             Value::Number(s) => Ok(s),
@@ -150,7 +143,12 @@ impl PartialEq for LoxCallable {
 }
 
 impl LoxCallable {
-    pub fn call(self, interpreter: &mut Interpreter, args: Vec<Value>, call_location: (usize, usize)) -> RuntimeResult<Value> {
+    pub fn call(
+        self,
+        interpreter: &mut Interpreter,
+        args: Vec<Value>,
+        call_location: (usize, usize),
+    ) -> RuntimeResult<Value> {
         match self {
             LoxCallable::LoxFunction {
                 params,

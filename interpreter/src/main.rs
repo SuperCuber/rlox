@@ -1,6 +1,7 @@
 use std::{
     env::args,
     io::{stdin, BufRead, Write},
+    iter::repeat,
 };
 
 use anyhow::{Context, Result};
@@ -55,9 +56,18 @@ fn run_prompt() -> Result<()> {
 fn run_file(filename: String) -> Result<()> {
     let mut interpreter = interpreter::Interpreter::new();
     let source = std::fs::read_to_string(filename).context("read source file")?;
-    if let Err(errs) = run(source, &mut interpreter, false) {
+    if let Err(errs) = run(source.clone(), &mut interpreter, false) {
         for err in errs {
             eprintln!("{}", err);
+            if let Some((line, col)) = err.location() {
+                let line_text = source
+                    .split('\n')
+                    .nth(line - 1)
+                    .expect("find error line in source code");
+                eprintln!("{line_text}");
+                let padding = repeat(' ').take(col - 1).collect::<String>();
+                eprintln!("{padding}^");
+            }
         }
     }
     Ok(())

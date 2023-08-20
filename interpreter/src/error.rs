@@ -19,6 +19,18 @@ pub enum LoxError {
     Runtime(#[from] RuntimeError),
 }
 
+impl LoxError {
+    pub fn location(&self) -> Option<(usize, usize)> {
+        match self {
+            LoxError::Io(_) => None,
+            LoxError::Tokenize(Located { location, .. })
+            | LoxError::Parse(Located { location, .. })
+            | LoxError::Resolve(Located { location, .. })
+            | LoxError::Runtime(Located { location, .. }) => Some(*location),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Located<T> {
     pub location: (usize, usize),
